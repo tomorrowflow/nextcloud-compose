@@ -170,6 +170,11 @@ generate_env_file() {
     # Generate Redis password automatically
     print_info "Generating secure Redis password..."
     REDIS_PASSWORD=$(generate_password 24)
+
+    # Creating secure random strings for talk-hpb
+    TURN_SECRET=`openssl rand --hex 32`
+    SIGNALING_SECRET=`openssl rand --hex 32`
+    INTERNAL_SECRET=`openssl rand --hex 32`
     
     # Create .env file
     cat > "$ENV_FILE" << EOF
@@ -179,6 +184,9 @@ MYSQL_PASSWORD=$MYSQL_PASSWORD
 NEXTCLOUD_ADMIN_USER=$NEXTCLOUD_ADMIN_USER
 NEXTCLOUD_ADMIN_PASSWORD=$NEXTCLOUD_ADMIN_PASSWORD
 REDIS_PASSWORD=$REDIS_PASSWORD
+TURN_SECRET=$TURN_SECRET
+SIGNALING_SECRET=$SIGNALING_SECRET
+INTERNAL_SECRET=$INTERNAL_SECRET
 EOF
     
     # Set appropriate permissions
@@ -352,4 +360,14 @@ docker restart nextcloud-traefik
 
 # Get domain name from .env file for final message
 DOMAIN_NAME=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
+SIGNALING_SECRET=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
+TURN_SECRET=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
+
+print_info "Please note the following details for the Nextcloud Talk High-Performance Backend"
+print_info "Signaling server: wss://signal.$DOMAIN_NAME"
+print_info "Signaling secret: $SIGNALING_SECRET"
+
+print_info "Turn server: signal.$DOMAIN_NAME:3478"
+print_info "Turn secret: $TURN_SECRET"
+
 print_success "Nextcloud installation is complete. You can access it at https://$DOMAIN_NAME"
