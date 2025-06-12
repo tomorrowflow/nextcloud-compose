@@ -201,7 +201,7 @@ main "$@"
 
 # Start Docker Compose
 print_info "Starting Docker Compose..."
-docker-compose up -d
+docker compose up -d
 
 print_info "Monitoring Nextcloud initialization..."
 
@@ -231,7 +231,7 @@ opcache.jit_buffer_size => 128" >> /opt/containers/nextcloud/app/.user.ini
 
 # Start Docker Compose again
 print_info "Starting Docker Compose..."
-docker-compose up -d
+docker compose up -d
 
 # Run Nextcloud configuration commands
 docker exec -it -u 33 nextcloud-app ./occ config:system:set maintenance_window_start --value="1" --type=integer
