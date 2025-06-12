@@ -9,7 +9,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
-      - /opt/containers/nextcloud/database:/var/lib/mysql
+      - ./database:/var/lib/mysql
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD} #SQL root Passwort eingeben
       - MYSQL_PASSWORD=${MYSQL_PASSWORD} #SQL Benutzer Passwort eingeben
