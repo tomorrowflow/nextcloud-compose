@@ -197,6 +197,75 @@ validate_domain() {
     return 0
 }
 
+# Function to monitor Docker compose logs for initialization completion
+monitor_nextcloud_initialization() {
+    local container_name="nextcloud-app"
+    local search_term="Initializing finished"
+    local timeout_seconds=600
+    
+    print_info "Monitoring docker compose logs for: '$search_term'"
+    print_info "Timeout set to $timeout_seconds seconds"
+    
+    # Create a temporary file to store the initialization flag
+    local init_flag="/tmp/nextcloud_init_complete_$$"
+    
+    # Start monitoring logs in background
+    (
+        timeout "$timeout_seconds" docker compose logs -f "$container_name" 2>&1 | while IFS= read -r LOG_LINE; do
+            echo "$LOG_LINE"
+            
+            if [[ "$LOG_LINE" == *"$search_term"* ]]; then
+                print_info "Found initialization completion message!"
+                print_info "Nextcloud initialization completed. Stopping Docker containers..."
+                
+                # Create flag file to signal completion
+                touch "$init_flag"
+                
+                # Kill the log monitoring process
+                pkill -f "docker compose logs -f $container_name" 2>/dev/null || true
+                break
+            fi
+        done
+    ) &
+    
+    local log_pid=$!
+    
+    # Wait for initialization to complete or timeout
+    local elapsed=0
+    while [ ! -f "$init_flag" ] && [ $elapsed -lt $timeout_seconds ]; do
+        sleep 2
+        elapsed=$((elapsed + 2))
+        
+        # Check if the log monitoring process is still running
+        if ! kill -0 $log_pid 2>/dev/null; then
+            break
+        fi
+    done
+    
+    # Clean up
+    kill $log_pid 2>/dev/null || true
+    
+    if [ -f "$init_flag" ]; then
+        # Stop containers
+        docker compose down
+        if [ $? -eq 0 ]; then
+            print_success "Docker containers stopped successfully"
+        else
+            print_error "Failed to stop Docker containers"
+            rm -f "$init_flag"
+            exit 1
+        fi
+        
+        sleep 15
+        rm -f "$init_flag"
+        return 0
+    else
+        print_error "Timeout waiting for Nextcloud initialization or process failed"
+        rm -f "$init_flag" 2>/dev/null || true
+        return 1
+    fi
+}
+
 # Main execution
 main() {
     echo "========================================"
@@ -231,7 +300,7 @@ main() {
 main "$@"
 
 # Adjusting permissions for letsencrypt
-touch 600 traefik/acme.json
+touch traefik/acme.json
 chmod 600 traefik/acme.json
 
 # Start Docker Compose
@@ -240,16 +309,13 @@ docker compose up -d
 
 print_info "Monitoring Nextcloud initialization..."
 
-# Monitor Docker logs for initialization completion
-docker logs -f nextcloud-app 2>&1 | while read LOG_LINE; do
-  echo "$LOG_LINE"
-  if [[ "$LOG_LINE" == *"Initializing finished"* ]]; then
-    print_info "Nextcloud initialization completed. Stopping Docker containers..."
-    docker compose down
-    sleep 15
-    break
-  fi
-done
+# Monitor Docker logs for initialization completion using improved method
+if monitor_nextcloud_initialization; then
+    print_success "Nextcloud initialization monitoring completed successfully"
+else
+    print_error "Nextcloud initialization monitoring failed"
+    exit 1
+fi
 
 # Increase file handling in PHP
 printf "php_value upload_max_filesize=16G
@@ -270,7 +336,11 @@ print_info "Starting Docker Compose..."
 docker compose up -d
 sleep 15
 
+# Get domain name from .env file for final message
+DOMAIN_NAME=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
+
 # Run Nextcloud configuration commands
+print_info "Running Nextcloud configuration commands..."
 docker exec -it -u 33 nextcloud-app ./occ config:system:set maintenance_window_start --value="1" --type=integer
 docker exec -it -u 33 nextcloud-app ./occ config:system:set default_phone_region --value="DE"
 docker exec -it -u 33 nextcloud-app ./occ db:add-missing-indices
