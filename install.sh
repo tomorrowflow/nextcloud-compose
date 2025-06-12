@@ -230,6 +230,10 @@ main() {
 # Run main function
 main "$@"
 
+# Adjusting permissions for letsencrypt
+touch 600 traefik/acme.json
+chmod 600 traefik/acme.json
+
 # Start Docker Compose
 print_info "Starting Docker Compose..."
 docker compose up -d
@@ -242,6 +246,7 @@ docker logs -f nextcloud-app 2>&1 | while read LOG_LINE; do
   if [[ "$LOG_LINE" == *"nextcloud-app  | Initializing finished"* ]]; then
     print_info "Nextcloud initialization completed. Stopping Docker containers..."
     docker-compose down
+    sleep 15
     break
   fi
 done
@@ -263,6 +268,7 @@ opcache.jit_buffer_size => 128" >> /opt/containers/nextcloud/app/.user.ini
 # Start Docker Compose again
 print_info "Starting Docker Compose..."
 docker compose up -d
+sleep 15
 
 # Run Nextcloud configuration commands
 docker exec -it -u 33 nextcloud-app ./occ config:system:set maintenance_window_start --value="1" --type=integer
