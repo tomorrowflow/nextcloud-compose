@@ -84,7 +84,37 @@ read_with_default() {
     fi
 }
 
+# Function to check if Docker is installed
+check_docker() {
+    print_info "Checking Docker installation..."
+    
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed or not in PATH."
+        echo
+        echo "Docker is required for this Nextcloud installation."
+        echo "Please install Docker first:"
+        echo "  - Visit: https://docs.docker.com/get-docker/"
+        echo "  - Or use your package manager (e.g., apt install docker.io)"
+        echo
+        exit 1
+    fi
+    
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        print_error "Docker Compose is not installed or not available."
+        echo
+        echo "Docker Compose is required for this Nextcloud installation."
+        echo "Please install Docker Compose:"
+        echo "  - Visit: https://docs.docker.com/compose/install/"
+        echo "  - Or use your package manager"
+        echo
+        exit 1
+    fi
+    
+    print_success "Docker and Docker Compose are installed."
+}
+
 # Function to check if .env exists and ask user what to do
+# Returns 0 if keeping existing config, 1 if creating new config
 check_existing_env() {
     if [[ -f "$ENV_FILE" ]]; then
         print_info "Found existing $ENV_FILE file."
@@ -97,11 +127,11 @@ check_existing_env() {
             case "$choice" in
                 [Yy]|[Yy][Ee][Ss])
                     print_success "Keeping existing configuration."
-                    exit 0
+                    return 0
                     ;;
                 [Nn]|[Nn][Oo])
                     print_info "Creating new configuration..."
-                    break
+                    return 1
                     ;;
                 *)
                     print_error "Please answer y (yes) or n (no)."
@@ -110,6 +140,7 @@ check_existing_env() {
         done
     else
         print_info "No existing $ENV_FILE found. Creating new configuration..."
+        return 1
     fi
 }
 
@@ -139,11 +170,6 @@ generate_env_file() {
     # Generate Redis password automatically
     print_info "Generating secure Redis password..."
     REDIS_PASSWORD=$(generate_password 24)
-
-    # Creating secure random strings for talk-hpb
-    TURN_SECRET=`openssl rand --hex 32`
-    SIGNALING_SECRET=`openssl rand --hex 32`
-    INTERNAL_SECRET=`openssl rand --hex 32`
     
     # Create .env file
     cat > "$ENV_FILE" << EOF
@@ -153,22 +179,12 @@ MYSQL_PASSWORD=$MYSQL_PASSWORD
 NEXTCLOUD_ADMIN_USER=$NEXTCLOUD_ADMIN_USER
 NEXTCLOUD_ADMIN_PASSWORD=$NEXTCLOUD_ADMIN_PASSWORD
 REDIS_PASSWORD=$REDIS_PASSWORD
-TURN_SECRET=$TURN_SECRET
-SIGNALING_SECRET=$SIGNALING_SECRET
-INTERNAL_SECRET=$INTERNAL_SECRET
 EOF
     
     # Set appropriate permissions
     chmod 600 "$ENV_FILE"
     
     print_success "$ENV_FILE file has been created successfully!"
-
-    print_success "Please note the following details for the Nextcloud Talk High-Performance Backend"
-    print_success "Signaling server: wss://signal.$DOMAIN_NAME"
-    print_success "Signaling secret: $SIGNALING_SECRET"
-
-    print_success "Turn server: signal.$DOMAIN_NAME:3478"
-    print_success "Turn secret: $TURN_SECRET"
     print_warning "Make sure to keep this file secure as it contains sensitive passwords."
 }
 
@@ -188,12 +204,27 @@ main() {
     echo "========================================"
     echo
     
-    check_existing_env
-    generate_env_file
+    # Check Docker installation first
+    check_docker
+    echo
+    
+    if check_existing_env; then
+        # User chose to keep existing configuration
+        print_info "Using existing configuration from $ENV_FILE"
+    else
+        # User chose to create new configuration or no .env exists
+        generate_env_file
+    fi
     
     echo
-    print_success "Setup completed! We will now proceed with your Nextcloud installation."
-    print_info "The configuration has been saved to $ENV_FILE"
+    print_success "Configuration ready! You can now proceed with your Nextcloud installation."
+    print_info "The configuration is saved in $ENV_FILE"
+    
+    # Add your additional commands here
+    # For example:
+    # print_info "Running additional setup commands..."
+    # docker-compose up -d
+    # etc.
 }
 
 # Run main function
