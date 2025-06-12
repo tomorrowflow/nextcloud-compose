@@ -319,7 +319,7 @@ fi
 
 # Increase file handling in PHP
 printf "php_value upload_max_filesize=16G
-php_value post_max_size=16G" >> /opt/containers/nextcloud/app/.user.ini
+php_value post_max_size=16G" >> ./app/.user.ini
 
 printf "opcache.enable_cli => 1
 apc.enable_cli => 1
@@ -330,7 +330,7 @@ opcache.interned_strings_buffer => 8
 opcache.max_accelerated_files => 10000
 opcache.memory_consumption => 128
 opcache.jit => 1255
-opcache.jit_buffer_size => 128" >> /opt/containers/nextcloud/app/.user.ini
+opcache.jit_buffer_size => 128" >> ./app/.user.ini
 
 # Start Docker Compose again
 print_info "Starting Docker Compose..."
