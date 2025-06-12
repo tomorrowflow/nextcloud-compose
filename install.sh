@@ -233,7 +233,7 @@ monitor_nextcloud_initialization() {
     # Wait for initialization to complete or timeout
     local elapsed=0
     while [ ! -f "$init_flag" ] && [ $elapsed -lt $timeout_seconds ]; do
-        sleep 2
+        sleep 5
         elapsed=$((elapsed + 2))
         
         # Check if the log monitoring process is still running
@@ -321,7 +321,8 @@ fi
 printf "php_value upload_max_filesize=16G
 php_value post_max_size=16G" >> /opt/containers/nextcloud/app/.user.ini
 
-printf "opcache.enable_cli => 1\napc.enable_cli => 1
+printf "opcache.enable_cli => 1
+apc.enable_cli => 1
 opcache.save_comments => 1
 opcache.revalidate_freq => 60
 opcache.validate_timestamps => 0
@@ -336,9 +337,6 @@ print_info "Starting Docker Compose..."
 docker compose up -d
 sleep 15
 
-# Get domain name from .env file for final message
-DOMAIN_NAME=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
-
 # Run Nextcloud configuration commands
 print_info "Running Nextcloud configuration commands..."
 docker exec -it -u 33 nextcloud-app ./occ config:system:set maintenance_window_start --value="1" --type=integer
@@ -348,4 +346,6 @@ docker exec -it -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
 docker exec -it -u 33 nextcloud-app ./occ app:enable spreed
 docker exec -it -u 33 nextcloud-app ./occ app:enable calendar
 
+# Get domain name from .env file for final message
+DOMAIN_NAME=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
 print_success "Nextcloud installation is complete. You can access it at https://$DOMAIN_NAME"
