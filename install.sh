@@ -233,7 +233,7 @@ monitor_nextcloud_initialization() {
     # Wait for initialization to complete or timeout
     local elapsed=0
     while [ ! -f "$init_flag" ] && [ $elapsed -lt $timeout_seconds ]; do
-        sleep 5
+        sleep 2
         elapsed=$((elapsed + 2))
         
         # Check if the log monitoring process is still running
@@ -247,6 +247,7 @@ monitor_nextcloud_initialization() {
     
     if [ -f "$init_flag" ]; then
         # Stop containers
+        sleep 10
         docker compose down
         if [ $? -eq 0 ]; then
             print_success "Docker containers stopped successfully"
@@ -339,12 +340,15 @@ sleep 15
 
 # Run Nextcloud configuration commands
 print_info "Running Nextcloud configuration commands..."
+docker exec -it -u 33 nextcloud-app ./occ upgrade
 docker exec -it -u 33 nextcloud-app ./occ config:system:set maintenance_window_start --value="1" --type=integer
 docker exec -it -u 33 nextcloud-app ./occ config:system:set default_phone_region --value="DE"
 docker exec -it -u 33 nextcloud-app ./occ db:add-missing-indices
 docker exec -it -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
 docker exec -it -u 33 nextcloud-app ./occ app:enable spreed
 docker exec -it -u 33 nextcloud-app ./occ app:enable calendar
+sleep 2
+docker restart nextcloud-traefik
 
 # Get domain name from .env file for final message
 DOMAIN_NAME=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)

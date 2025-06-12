@@ -28,6 +28,6 @@ providers:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: 'alibi@putyourmailadress.here'
+      email: 'alibi@yourmailadressgoes.here'
       storage: 'acme.json'
       tlsChallenge: {}

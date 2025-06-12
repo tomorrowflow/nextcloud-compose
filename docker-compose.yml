@@ -66,6 +66,9 @@ services:
       - traefik.http.routers.nextcloud.rule=Host(`${DOMAIN_NAME}`)
       - traefik.http.routers.nextcloud.service=nextcloud
       - traefik.http.services.nextcloud.loadbalancer.server.port=80
+    networks:
+      - proxy
+      - default
 
   traefik:
     build:
@@ -97,6 +100,9 @@ services:
       - traefik.http.routers.traefik-secure.rule=Host(`${DOMAIN_NAME}`)
       - traefik.http.routers.traefik-secure.service=api@internal
       - traefik.http.routers.traefik-secure.middlewares=user-auth@file
+    networks:
+      - proxy
+      - default
 
   nextcloud-talk:
     container_name: nextcloud-talk_hpb
@@ -122,6 +128,9 @@ services:
       - traefik.http.routers.talk-hpf.rule=Host(`signal.${DOMAIN_NAME}`)
       - traefik.http.routers.talk-hpf.service=talk-hpf
       - traefik.http.services.talk-hpf.loadbalancer.server.port=8081
+    networks:
+      - proxy
+      - default
     
 networks:
   proxy:
