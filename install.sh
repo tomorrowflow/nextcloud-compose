@@ -243,7 +243,7 @@ print_info "Monitoring Nextcloud initialization..."
 # Monitor Docker logs for initialization completion
 docker logs -f nextcloud-app 2>&1 | while read LOG_LINE; do
   echo "$LOG_LINE"
-  if [[ "$LOG_LINE" == *"nextcloud-app  | Initializing finished"* ]]; then
+  if [[ "$LOG_LINE" == *"Nextcloud was successfully installed"* ]]; then
     print_info "Nextcloud initialization completed. Stopping Docker containers..."
     docker-compose down
     sleep 15
