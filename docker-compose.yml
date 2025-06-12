@@ -1,0 +1,135 @@
+services:
+  nextcloud-db:
+    image: mariadb:10.11
+    container_name: nextcloud-db
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: --transaction-isolation=READ-COMMITTED --innodb_read_only_compressed=OFF
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /opt/containers/nextcloud/database:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD} #SQL root Passwort eingeben
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD} #SQL Benutzer Passwort eingeben
+      - MYSQL_DATABASE=nextcloud #Datenbank Name
+      - MYSQL_USER=nextcloud #SQL Nutzername
+      - MYSQL_INITDB_SKIP_TZINFO=1
+      - MARIADB_AUTO_UPGRADE=1
+
+  nextcloud-redis:
+    image: redis:alpine
+    container_name: nextcloud-redis
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    hostname: nextcloud-redis
+    networks:
+        - default
+    command: redis-server --requirepass ${REDIS_PASSWORD} # Redis Passwort eingeben
+
+  nextcloud-app:
+    build:
+        context: .
+        dockerfile: Dockerfile.nextcloud
+    container_name: nextcloud-app
+    restart: unless-stopped
+    depends_on:
+      - nextcloud-db
+      - nextcloud-redis
+    environment:
+      - TRUSTED_PROXIES=172.18.0.0/16
+      - DEFAULT_PHONE_REGION=de
+      - MAINTENANCE_WINDOW=1
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_HOST=nextcloud-db
+      - REDIS_HOST=nextcloud-redis
+      - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER}
+      - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD}
+      - OVERWRITEPROTOCOL=https
+      - OVERWRITECLIURL=https://${DOMAIN_NAME}
+      - OVERWRITEHOST=${DOMAIN_NAME}
+      - REDIS_HOST=nextcloud-redis
+      - REDIS_HOST_PASSWORD=${REDIS_PASSWORD} # Redis Passwort von oben wieder eingeben
+    volumes:
+      - ./app:/var/www/html
+      - ./data:/var/www/html/data
+    expose:
+      - "80"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.nextcloud.entrypoints=websecure
+      - traefik.http.routers.nextcloud.rule=Host(`${DOMAIN_NAME}`)
+      - traefik.http.routers.nextcloud.service=nextcloud
+      - traefik.http.services.nextcloud.loadbalancer.server.port=80
+
+  traefik:
+    build:
+        context: .
+        dockerfile: Dockerfile.traefik
+    container_name: "nextcloud-traefik"
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
+    ports:
+      - "443:443"
+      - "8080:8080"
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://nextcloud-app:80"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik/traefik.yml:/traefik.yml:ro"
+      - "./traefik/letsencrypt:/letsencrypt"
+      - "./traefik/config:/config"
+      - "./traefik/acme.json:/acme.json"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.traefik-secure.entrypoints=websecure
+      - traefik.http.routers.traefik-secure.rule=Host(`${DOMAIN_NAME}`)
+      - traefik.http.routers.traefik-secure.service=api@internal
+      - traefik.http.routers.traefik-secure.middlewares=user-auth@file
+
+  nextcloud-talk:
+    container_name: nextcloud-talk_hpb
+    image: ghcr.io/nextcloud-releases/aio-talk:latest
+    init: true
+    ports:
+      - 3478:3478/tcp
+      - 3478:3478/udp
+      - 8081:8081/tcp
+    environment:
+      - TZ=Europe/Berlin
+      - TALK_PORT=3478
+      - NC_DOMAIN=${DOMAIN_NAME}
+      - TALK_HOST=signal.${DOMAIN_NAME}
+      - TURN_SECRET=${TURN_SECRET}
+      - SIGNALING_SECRET=${SIGNALING_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.talk-hpf.entrypoints=websecure
+      - traefik.http.routers.talk-hpf.rule=Host(`signal.${DOMAIN_NAME}`)
+      - traefik.http.routers.talk-hpf.service=talk-hpf
+      - traefik.http.services.talk-hpf.loadbalancer.server.port=8081
+    
+networks:
+  proxy:
+    external: true
+  public:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.18.0.0/24"
+          gateway: "172.18.0.1"
