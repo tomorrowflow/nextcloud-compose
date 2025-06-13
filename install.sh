@@ -256,7 +256,7 @@ monitor_nextcloud_initialization() {
     if [ -f "$init_flag" ]; then
         # Stop containers
         sleep 10
-        docker compose down
+        docker compose stop
         if [ $? -eq 0 ]; then
             print_success "Docker containers stopped successfully"
         else
@@ -360,8 +360,8 @@ docker restart nextcloud-traefik
 
 # Get domain name from .env file for final message
 DOMAIN_NAME=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
-SIGNALING_SECRET=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
-TURN_SECRET=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
+SIGNALING_SECRET=$(grep "^SIGNALING_SECRET=" "$ENV_FILE" | cut -d'=' -f2)
+TURN_SECRET=$(grep "^TURN_SECRET=" "$ENV_FILE" | cut -d'=' -f2)
 
 print_info "Please note the following details for the Nextcloud Talk High-Performance Backend"
 print_info "Signaling server: wss://signal.$DOMAIN_NAME"
