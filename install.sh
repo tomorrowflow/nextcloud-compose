@@ -256,7 +256,7 @@ monitor_nextcloud_initialization() {
     if [ -f "$init_flag" ]; then
         # Stop containers
         sleep 10
-        docker compose stop
+        docker compose down
         if [ $? -eq 0 ]; then
             print_success "Docker containers stopped successfully"
         else

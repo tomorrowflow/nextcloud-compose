@@ -1,5 +1,8 @@
 api:
   dashboard: true
+  insecure: false
+
+ping: {}
 
 entryPoints:
   web:
@@ -8,6 +11,7 @@ entryPoints:
       redirections:
         entryPoint:
           to: websecure
+          scheme: https
 
   websecure:
     address: ":443"
@@ -21,6 +25,7 @@ providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
+    network: proxy
   file:
     watch: true
     filename: /config/dynamic.yml
@@ -28,6 +33,11 @@ providers:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: 'alibi@yourmailadressgoes.here'
+      email: 'your-email@example.com'  # Replace with your actual email
       storage: 'acme.json'
       tlsChallenge: {}
+
+log:
+  level: INFO
+
+accessLog: {}

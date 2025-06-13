@@ -1,6 +1,7 @@
 # Dynamic configuration
 http:
   middlewares:
+    # Security headers for all HTTPS traffic
     secureHeaders:
       headers:
         sslRedirect: true
@@ -8,10 +9,34 @@ http:
         stsIncludeSubdomains: true
         stsPreload: true
         stsSeconds: 15552000
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customFrameOptionsValue: "SAMEORIGIN"
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+    
+    # Basic authentication for Traefik dashboard
     user-auth:
       basicAuth:
         users:
           - "admin:$apr1$945jfuda$AK1d46U3FD4dzFQdd4jeD/"
+    
+    # Strip /traefik prefix for dashboard access
+    traefik-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/traefik"
+    
+    nextcloud-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: "strict-origin-when-cross-origin"
 
 tls:
   options:
@@ -24,3 +49,4 @@ tls:
         - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
         - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
       minVersion: VersionTLS12
+      maxVersion: VersionTLS13
