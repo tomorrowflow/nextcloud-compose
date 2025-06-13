@@ -85,7 +85,7 @@ services:
       - "443:443"
       - "8080:8080"
     healthcheck:
-        test: ["CMD", "curl", "-f", "http://nextcloud-app:80"]
+        test: ["CMD", "curl", "-f", "http://nextcloud-app:80/"]
         interval: 30s
         timeout: 10s
         retries: 5
@@ -100,11 +100,17 @@ services:
       - traefik.enable=true
       - traefik.docker.network=proxy
       - traefik.http.routers.traefik-secure.entrypoints=websecure
-      - traefik.http.routers.traefik-secure.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/traefik`)
+      - traefik.http.routers.traefik-secure.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/traefik/dashboard`) || PathPrefix(`/traefik/api`))
       - traefik.http.routers.traefik-secure.service=api@internal
       - traefik.http.routers.traefik-secure.middlewares=traefik-stripprefix@file,user-auth@file
       - traefik.http.routers.traefik-secure.priority=10
       - traefik.http.routers.traefik-secure.tls.certresolver=letsencrypt
+      # Redirect /traefik to /traefik/dashboard/
+      - traefik.http.routers.traefik-redirect.entrypoints=websecure
+      - traefik.http.routers.traefik-redirect.rule=Host(`${DOMAIN_NAME}`) && Path(`/traefik`)
+      - traefik.http.routers.traefik-redirect.middlewares=traefik-redirect@file,user-auth@file
+      - traefik.http.routers.traefik-redirect.priority=11
+      - traefik.http.routers.traefik-redirect.tls.certresolver=letsencrypt
     networks:
       - proxy
 

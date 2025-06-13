@@ -28,6 +28,13 @@ http:
         prefixes:
           - "/traefik"
     
+    # Redirect /traefik to /traefik/dashboard/
+    traefik-redirect:
+      redirectRegex:
+        regex: "^https?://([^/]+)/traefik/?$"
+        replacement: "https://${1}/traefik/dashboard/"
+        permanent: false
+    
     nextcloud-headers:
       headers:
         customRequestHeaders:
