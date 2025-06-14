@@ -157,6 +157,31 @@ The installation includes a high-performance backend for Nextcloud Talk:
 
 ## 🚨 Troubleshooting
 
+### Quick Diagnostic
+
+Run the built-in troubleshooting scripts:
+```bash
+# General system check
+./troubleshoot.sh
+
+# Specific dashboard routing test
+./test-dashboard.sh
+```
+
+The troubleshooting script checks:
+- Container status and health
+- Network connectivity
+- Traefik configuration
+- File permissions
+- Port availability
+- Recent error logs
+
+The dashboard test script specifically checks:
+- Traefik dashboard routing
+- Authentication middleware
+- Route priorities
+- API endpoint access
+
 ### Check Container Status
 ```bash
 docker-compose ps
@@ -189,14 +214,90 @@ docker-compose restart nextcloud-app
    sudo netstat -tlnp | grep :443
    ```
 
-2. **SSL certificate issues**:
+2. **Traefik dashboard shows Nextcloud error instead of dashboard**:
+   ```bash
+   # Test dashboard routing
+   ./test-dashboard.sh
+   
+   # Check route priorities (higher number = higher priority)
+   docker-compose logs traefik | grep -i "router.*priority"
+   
+   # Restart Traefik to reload routes
+   docker restart nextcloud-traefik
+   
+   # Test routing manually
+   curl -H "Host: your-domain.com" http://localhost/traefik/dashboard/
+   # Should return 401 (auth required), not 404
+   
+   # Check middleware configuration
+   docker exec nextcloud-traefik cat /config/dynamic.yml | grep -A 5 traefik-stripprefix
+   ```
+
+3. **Traefik container stuck in "starting" status**:
+   ```bash
+   # Check Traefik health status
+   docker inspect nextcloud-traefik --format='{{.State.Health.Status}}'
+   
+   # Check Traefik logs
+   docker logs nextcloud-traefik
+   
+   # Check if ping endpoint is accessible
+   docker exec nextcloud-traefik wget -qO- http://localhost:8080/ping
+   
+   # Restart Traefik if needed
+   docker restart nextcloud-traefik
+   ```
+
+3. **SSL certificate issues**:
    - Check DNS is pointing to your server
    - Verify ports 80/443 are accessible from internet
    - Check Let's Encrypt rate limits
+   - Verify acme.json permissions: `ls -la traefik/acme.json` (should be 600)
 
-3. **Database connection issues**:
+4. **Database connection issues**:
    - Wait for full initialization (can take 5-10 minutes)
    - Check MySQL logs: `docker-compose logs -f nextcloud-db`
+
+6. **Traefik dashboard not accessible**:
+   ```bash
+   # Verify Traefik is routing correctly
+   curl -H "Host: your-domain.com" http://localhost/traefik/dashboard/
+   
+   # Check dynamic configuration
+   docker exec nextcloud-traefik cat /config/dynamic.yml
+   
+   # Verify password hash in dynamic.yml
+   docker exec nextcloud-traefik ls -la /config/
+   ```
+
+### Traefik Troubleshooting
+
+If Traefik remains stuck in "starting" status:
+
+1. **Check the health check manually**:
+   ```bash
+   docker exec nextcloud-traefik wget --spider http://localhost:8080/ping
+   ```
+
+2. **Disable health checks temporarily** (for debugging):
+   ```bash
+   # Edit docker-compose.yml and comment out the healthcheck section
+   # Then restart: docker-compose up -d traefik
+   ```
+
+3. **Check for configuration issues**:
+   ```bash
+   # Validate Traefik configuration
+   docker exec nextcloud-traefik traefik version
+   docker logs nextcloud-traefik | grep -i error
+   ```
+
+4. **Reset Traefik completely**:
+   ```bash
+   docker-compose stop traefik
+   docker-compose rm -f traefik
+   docker-compose up -d traefik
+   ```
 
 ## 🔧 Maintenance
 

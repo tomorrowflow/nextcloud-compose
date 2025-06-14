@@ -161,13 +161,13 @@ create_nextcloud_init_script() {
 #!/bin/bash
 set -e
 
-echo "Installing bz2 extension for Nextcloud..."
+echo "Installing bz2 extension and curl for Nextcloud..."
 
 # Update package list
 apt-get update
 
-# Install bzip2 library and PHP extension
-apt-get install -y libbz2-dev
+# Install bzip2 library, curl, and PHP extension
+apt-get install -y libbz2-dev curl
 
 # Install and enable PHP bz2 extension
 docker-php-ext-install bz2
@@ -178,10 +178,11 @@ apt-get autoremove -y
 apt-get autoclean
 rm -rf /var/lib/apt/lists/*
 
-echo "bz2 extension installed successfully!"
+echo "bz2 extension and curl installed successfully!"
 
 # Verify installation
 php -m | grep -i bz2 && echo "✓ bz2 extension is loaded" || echo "✗ Warning: bz2 extension not found"
+curl --version >/dev/null 2>&1 && echo "✓ curl is available" || echo "✗ Warning: curl not found"
 EOF
     
     chmod +x scripts/nextcloud-init.sh
@@ -196,24 +197,25 @@ create_watchtower_hooks() {
 #!/bin/bash
 set -e
 
-echo "Watchtower post-update hook: Reinstalling bz2 extension..."
+echo "Watchtower post-update hook: Reinstalling bz2 extension and curl..."
 
 # Wait for container to be ready
 sleep 60
 
-# Install bz2 extension
+# Install bz2 extension and curl
 docker exec nextcloud-app bash -c "
     set -e
-    echo 'Reinstalling bz2 extension after watchtower update...'
+    echo 'Reinstalling bz2 extension and curl after watchtower update...'
     apt-get update
-    apt-get install -y libbz2-dev
+    apt-get install -y libbz2-dev curl
     docker-php-ext-install bz2
     docker-php-ext-enable bz2
     apt-get autoremove -y
     apt-get autoclean
     rm -rf /var/lib/apt/lists/*
-    echo 'bz2 extension reinstalled successfully!'
+    echo 'bz2 extension and curl reinstalled successfully!'
     php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
+    curl --version >/dev/null 2>&1 && echo '✓ curl is available' || echo '✗ Warning: curl not found'
 "
 
 echo "✓ Post-update hook completed"
@@ -273,6 +275,13 @@ http:
       stripPrefix:
         prefixes:
           - "/traefik"
+        forceSlash: false
+    
+    # Redirect HTTP to HTTPS
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
     
     # Nextcloud specific headers
     nextcloud-headers:
@@ -479,12 +488,20 @@ install_bz2_extension() {
     print_info "Installing bz2 extension in Nextcloud container..."
     
     local container_name="nextcloud-app"
-    local max_attempts=30
+    local max_attempts=60
     local attempt=1
     
+    # First, check if container is running
+    if ! docker ps --format "table {{.Names}}" | grep -q "^${container_name}$"; then
+        print_error "Container $container_name is not running"
+        return 1
+    fi
+    
     # Wait for container to be ready
+    print_info "Waiting for Nextcloud container to be fully ready..."
     while [ $attempt -le $max_attempts ]; do
-        if docker exec $container_name test -f /var/www/html/version.php 2>/dev/null; then
+        # Check if Nextcloud is responding and not in maintenance mode
+        if docker exec $container_name curl -f -s http://localhost:80/status.php 2>/dev/null | grep -q '"installed":true'; then
             print_success "Nextcloud container is ready for bz2 installation"
             break
         fi
@@ -494,27 +511,29 @@ install_bz2_extension() {
     done
     
     if [ $attempt -gt $max_attempts ]; then
-        print_error "Nextcloud container failed to start properly"
+        print_error "Nextcloud container failed to become ready for bz2 installation"
+        print_info "Checking container status..."
+        docker ps --filter "name=$container_name"
+        docker logs --tail 20 $container_name
         return 1
     fi
     
     # Install bz2 extension
-    print_info "Installing bz2 extension..."
-    docker exec $container_name bash -c "
+    print_info "Installing bz2 extension and curl..."
+    if docker exec $container_name bash -c "
         set -e
-        echo 'Installing bz2 extension...'
-        apt-get update
-        apt-get install -y libbz2-dev
-        docker-php-ext-install bz2
-        docker-php-ext-enable bz2
-        apt-get autoremove -y
-        apt-get autoclean
-        rm -rf /var/lib/apt/lists/*
-        echo 'bz2 extension installed successfully!'
+        echo 'Installing bz2 extension and curl...'
+        apt-get update >/dev/null 2>&1
+        apt-get install -y libbz2-dev curl >/dev/null 2>&1
+        docker-php-ext-install bz2 >/dev/null 2>&1
+        docker-php-ext-enable bz2 >/dev/null 2>&1
+        apt-get autoremove -y >/dev/null 2>&1
+        apt-get autoclean >/dev/null 2>&1
+        rm -rf /var/lib/apt/lists/* >/dev/null 2>&1
+        echo 'bz2 extension and curl installed successfully!'
         php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
-    "
-    
-    if [ $? -eq 0 ]; then
+        curl --version >/dev/null 2>&1 && echo '✓ curl is available' || echo '✗ Warning: curl not found'
+    "; then
         print_success "bz2 extension installation completed successfully"
         return 0
     else
@@ -624,6 +643,163 @@ main() {
     # Create utility scripts
     create_nextcloud_init_script
     create_watchtower_hooks
+    
+    # Create troubleshooting script
+    cat > troubleshoot.sh << 'TROUBLESHOOT_EOF'
+#!/bin/bash
+
+# Nextcloud Docker Troubleshooting Script
+# This script helps diagnose common issues with the Nextcloud installation
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_header() { echo -e "${BLUE}=== $1 ===${NC}"; }
+
+# Check container status
+check_container_status() {
+    print_header "Container Status Check"
+    echo -e "\n${BLUE}Running Containers:${NC}"
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+}
+
+# Check health status
+check_health_status() {
+    print_header "Health Check Status"
+    for container in nextcloud-app nextcloud-db nextcloud-redis nextcloud-traefik; do
+        if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+            health_status=$(docker inspect $container --format='{{.State.Health.Status}}' 2>/dev/null || echo "no-healthcheck")
+            if [ "$health_status" = "healthy" ]; then
+                print_success "✓ $container: $health_status"
+            elif [ "$health_status" = "starting" ]; then
+                print_warning "⏳ $container: $health_status"
+            elif [ "$health_status" = "unhealthy" ]; then
+                print_error "✗ $container: $health_status"
+            else
+                print_info "ℹ️  $container: no health check configured"
+            fi
+        else
+            print_error "✗ $container: not running"
+        fi
+    done
+}
+
+# Check Traefik specific issues
+check_traefik() {
+    print_header "Traefik Diagnostic"
+    if ! docker ps --format "{{.Names}}" | grep -q "^nextcloud-traefik$"; then
+        print_error "✗ Traefik container is not running"
+        return 1
+    fi
+    
+    if docker exec nextcloud-traefik wget -qO- http://localhost:8080/ping 2>/dev/null | grep -q "OK"; then
+        print_success "✓ Traefik ping endpoint accessible"
+    else
+        print_error "✗ Traefik ping endpoint not accessible"
+    fi
+    
+    echo -e "\n${BLUE}Recent Traefik logs:${NC}"
+    docker logs nextcloud-traefik --tail 5
+}
+
+# Main execution
+main() {
+    echo "========================================"
+    echo "  Nextcloud Docker Troubleshooting"
+    echo "========================================"
+    echo
+    check_container_status
+    echo
+    check_health_status
+    echo
+    check_traefik
+    echo
+    print_info "For detailed diagnostics, check individual container logs:"
+    print_info "  docker-compose logs -f [service-name]"
+}
+
+main "$@"
+TROUBLESHOOT_EOF
+    
+    chmod +x troubleshoot.sh
+    
+    # Create dashboard testing script
+    cat > test-dashboard.sh << 'TESTDASH_EOF'
+#!/bin/bash
+
+# Traefik Dashboard Testing Script
+# This script tests if the Traefik dashboard routing is working correctly
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Check if .env file exists and load it
+if [ ! -f ".env" ]; then
+    print_error ".env file not found"
+    exit 1
+fi
+source .env
+
+echo "=== Traefik Dashboard Routing Test ==="
+echo "Domain: $DOMAIN_NAME"
+echo
+
+# Test dashboard routing
+print_info "Testing dashboard routing..."
+dashboard_response=$(curl -s -w "%{http_code}" -H "Host: $DOMAIN_NAME" "http://localhost/traefik/dashboard/" -o /dev/null 2>/dev/null || echo "000")
+
+case $dashboard_response in
+    "401")
+        print_success "✓ Dashboard routing working (401 = auth required)"
+        echo "Access at: https://$DOMAIN_NAME/traefik/dashboard/"
+        ;;
+    "404")
+        print_error "✗ Dashboard shows 404 - request going to Nextcloud instead"
+        echo "Fix: docker restart nextcloud-traefik"
+        ;;
+    *)
+        print_warning "⚠️  Dashboard returned HTTP $dashboard_response"
+        ;;
+esac
+
+# Test with authentication if password available
+if [ -n "$TRAEFIK_DASHBOARD_PASSWORD" ]; then
+    print_info "Testing with authentication..."
+    auth_response=$(curl -s -w "%{http_code}" -u "admin:$TRAEFIK_DASHBOARD_PASSWORD" -H "Host: $DOMAIN_NAME" "http://localhost/traefik/dashboard/" -o /dev/null 2>/dev/null || echo "000")
+    if [ "$auth_response" = "200" ]; then
+        print_success "✓ Dashboard accessible with authentication"
+    else
+        print_warning "⚠️  Auth test returned HTTP $auth_response"
+    fi
+fi
+
+echo
+print_info "For detailed troubleshooting, run: ./troubleshoot.sh"
+TESTDASH_EOF
+    
+    chmod +x test-dashboard.sh
+    
     echo
     
     if check_existing_env; then
@@ -668,7 +844,12 @@ else
     exit 1
 fi
 
-# Install bz2 extension
+# Restart containers after initialization monitoring
+print_info "Restarting containers after initialization..."
+docker compose up -d
+sleep 30
+
+# Install bz2 extension while containers are running
 print_info "Installing bz2 extension..."
 if install_bz2_extension; then
     print_success "bz2 extension installed successfully"
@@ -677,12 +858,17 @@ else
     exit 1
 fi
 
+# Stop containers for configuration changes
+print_info "Stopping containers for configuration updates..."
+docker compose down
+sleep 5
+
 # Increase file handling in PHP
 print_info "Configuring PHP settings..."
+mkdir -p ./app
 printf "php_value upload_max_filesize=16G
-php_value post_max_size=16G" >> ./app/.user.ini
-
-printf "opcache.enable_cli => 1
+php_value post_max_size=16G
+opcache.enable_cli => 1
 apc.enable_cli => 1
 opcache.save_comments => 1
 opcache.revalidate_freq => 60
@@ -691,14 +877,29 @@ opcache.interned_strings_buffer => 8
 opcache.max_accelerated_files => 10000
 opcache.memory_consumption => 128
 opcache.jit => 1255
-opcache.jit_buffer_size => 128" >> ./app/.user.ini
+opcache.jit_buffer_size => 128" > ./app/.user.ini
 
-# Start Docker Compose again
-print_info "Restarting Docker Compose with updated configuration..."
+# Start Docker Compose with final configuration
+print_info "Starting Docker Compose with updated configuration..."
 docker compose up -d
-sleep 15
+sleep 30
 
 # Run Nextcloud configuration commands
+print_info "Waiting for Nextcloud to be ready for final configuration..."
+sleep 60
+
+# Check Traefik status before final configuration
+print_info "Checking Traefik container status..."
+if docker ps --filter "name=nextcloud-traefik" --format "table {{.Names}}\t{{.Status}}" | grep -q "Up"; then
+    print_success "Traefik container is running"
+else
+    print_warning "Traefik container may not be healthy yet"
+    print_info "Traefik container status:"
+    docker ps --filter "name=nextcloud-traefik" --format "table {{.Names}}\t{{.Status}}"
+    print_info "Checking Traefik logs:"
+    docker logs --tail 10 nextcloud-traefik
+fi
+
 print_info "Running Nextcloud configuration commands..."
 docker exec -it -u 33 nextcloud-app ./occ upgrade
 docker exec -it -u 33 nextcloud-app ./occ config:system:set maintenance_window_start --value="1" --type=integer
@@ -707,16 +908,67 @@ docker exec -it -u 33 nextcloud-app ./occ db:add-missing-indices
 docker exec -it -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
 docker exec -it -u 33 nextcloud-app ./occ app:enable spreed
 docker exec -it -u 33 nextcloud-app ./occ app:enable calendar
-sleep 2
+
+# Give Traefik more time to become healthy
+print_info "Waiting for Traefik to become fully healthy..."
+sleep 30
+
+# Check if Traefik is healthy before restart
+traefik_health_attempts=10
+traefik_attempt=1
+while [ $traefik_attempt -le $traefik_health_attempts ]; do
+    if docker inspect nextcloud-traefik --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
+        print_success "Traefik is healthy"
+        break
+    elif docker inspect nextcloud-traefik --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "starting"; then
+        print_info "Traefik health check still starting... (attempt $traefik_attempt/$traefik_health_attempts)"
+        sleep 10
+        ((traefik_attempt++))
+    else
+        print_warning "Traefik health status unknown, proceeding anyway"
+        docker logs --tail 5 nextcloud-traefik
+        break
+    fi
+done
+
+print_info "Restarting Traefik to ensure proper routing..."
 docker restart nextcloud-traefik
+sleep 10
 
 # Get domain name from .env file for final message
-source "$ENV_FILE"
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+else
+    print_error "Environment file not found!"
+    exit 1
+fi
 
 print_success "========================================"
 print_success "  Nextcloud Installation Complete!"
 print_success "========================================"
 echo
+
+# Final system check
+print_info "Performing final system check..."
+print_info "Container Status:"
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+echo
+
+print_info "Health Check Status:"
+for container in nextcloud-app nextcloud-db nextcloud-redis nextcloud-traefik; do
+    health_status=$(docker inspect $container --format='{{.State.Health.Status}}' 2>/dev/null || echo "no-healthcheck")
+    if [ "$health_status" = "healthy" ]; then
+        print_success "  ✓ $container: $health_status"
+    elif [ "$health_status" = "starting" ]; then
+        print_warning "  ⏳ $container: $health_status (may take a few more minutes)"
+    elif [ "$health_status" = "no-healthcheck" ]; then
+        print_info "  ℹ️  $container: no health check configured"
+    else
+        print_warning "  ⚠️  $container: $health_status"
+    fi
+done
+echo
+
 print_info "Access URLs:"
 print_info "  📱 Nextcloud: https://$DOMAIN_NAME"
 print_info "  🔧 Traefik Dashboard: https://$DOMAIN_NAME/traefik/dashboard/"
@@ -735,8 +987,21 @@ print_info "  🔑 TURN secret: $TURN_SECRET"
 echo
 print_warning "Important Notes:"
 print_warning "  • Make sure your DNS points to this server"
+print_warning "  • If Traefik shows 'starting', wait 5-10 minutes for health checks"
+print_warning "  • If dashboard shows Nextcloud error, run: ./test-dashboard.sh"
 print_warning "  • Configure email settings in Talk app if needed"
 print_warning "  • Keep your .env file secure - it contains all passwords"
 print_warning "  • Check 'docker compose logs -f' for any issues"
+print_warning "  • Run './troubleshoot.sh' for system diagnostics"
 echo
+
+# Check if Traefik is accessible
+print_info "Testing Traefik accessibility..."
+if curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/ping" | grep -q "200"; then
+    print_success "  ✓ Traefik ping endpoint is accessible"
+else
+    print_warning "  ⚠️  Traefik ping endpoint not yet accessible (may still be starting)"
+    print_info "  Run this to check: curl http://localhost:8080/ping"
+fi
+
 print_success "Your Nextcloud installation is ready to use! 🎉"

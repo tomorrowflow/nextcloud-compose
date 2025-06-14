@@ -27,16 +27,17 @@ install_nextcloud_bz2() {
     # Install bz2 extension
     docker exec $container_name bash -c "
         set -e
-        echo 'Installing bz2 extension...'
+        echo 'Installing bz2 extension and curl...'
         apt-get update
-        apt-get install -y libbz2-dev
+        apt-get install -y libbz2-dev curl
         docker-php-ext-install bz2
         docker-php-ext-enable bz2
         apt-get autoremove -y
         apt-get autoclean
         rm -rf /var/lib/apt/lists/*
-        echo 'bz2 extension installed successfully!'
+        echo 'bz2 extension and curl installed successfully!'
         php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
+        curl --version >/dev/null 2>&1 && echo '✓ curl is available' || echo '✗ Warning: curl not found'
     "
     
     if [ $? -eq 0 ]; then
@@ -70,18 +71,19 @@ if [[ "$WATCHTOWER_CONTAINER_NAME" == *"nextcloud-app"* ]]; then
     sleep 30
     
     # Install bz2 extension
-    docker exec nextcloud-app bash -c "
+            docker exec nextcloud-app bash -c "
         set -e
-        echo 'Reinstalling bz2 extension after watchtower update...'
+        echo 'Reinstalling bz2 extension and curl after watchtower update...'
         apt-get update
-        apt-get install -y libbz2-dev
+        apt-get install -y libbz2-dev curl
         docker-php-ext-install bz2
         docker-php-ext-enable bz2
         apt-get autoremove -y
         apt-get autoclean
         rm -rf /var/lib/apt/lists/*
-        echo 'bz2 extension reinstalled successfully!'
+        echo 'bz2 extension and curl reinstalled successfully!'
         php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
+        curl --version >/dev/null 2>&1 && echo '✓ curl is available' || echo '✗ Warning: curl not found'
     "
     
     # Restart container to ensure changes take effect

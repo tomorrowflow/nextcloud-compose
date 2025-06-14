@@ -115,11 +115,11 @@ services:
       - "443:443"
       - "8080:8080"
     healthcheck:
-        test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/ping", "||", "exit", "1"]
+        test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/ping"]
         interval: 30s
         timeout: 10s
-        retries: 3
-        start_period: 30s
+        retries: 5
+        start_period: 60s
     volumes:
       - "/etc/localtime:/etc/localtime:ro"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
@@ -130,12 +130,18 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
+      # Traefik dashboard routing - higher priority to catch first
       - traefik.http.routers.traefik-secure.entrypoints=websecure
       - traefik.http.routers.traefik-secure.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/traefik/dashboard`) || PathPrefix(`/traefik/api`))
       - traefik.http.routers.traefik-secure.service=api@internal
       - traefik.http.routers.traefik-secure.middlewares=traefik-stripprefix@file,user-auth@file
-      - traefik.http.routers.traefik-secure.priority=10
+      - traefik.http.routers.traefik-secure.priority=100
       - traefik.http.routers.traefik-secure.tls.certresolver=letsencrypt
+      # HTTP to HTTPS redirect for dashboard
+      - traefik.http.routers.traefik-insecure.entrypoints=web
+      - traefik.http.routers.traefik-insecure.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/traefik/dashboard`) || PathPrefix(`/traefik/api`))
+      - traefik.http.routers.traefik-insecure.middlewares=redirect-to-https@file
+      - traefik.http.routers.traefik-insecure.priority=100
       # Autoheal and Watchtower labels
       - autoheal=true
       - com.centurylinklabs.watchtower.enable=true
