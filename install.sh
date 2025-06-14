@@ -84,6 +84,16 @@ read_with_default() {
     fi
 }
 
+# Function to validate email address
+validate_email() {
+    local email="$1"
+    if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Function to check if Docker is installed
 check_docker() {
     print_info "Checking Docker installation..."
@@ -111,6 +121,241 @@ check_docker() {
     fi
     
     print_success "Docker and Docker Compose are installed."
+}
+
+# Function to setup directory structure
+setup_directories() {
+    print_info "Setting up directory structure..."
+    
+    # Create main directories
+    mkdir -p traefik/{config,letsencrypt}
+    mkdir -p database
+    mkdir -p app
+    mkdir -p data
+    mkdir -p scripts/{watchtower-hooks}
+    
+    # Set proper permissions for acme.json
+    touch traefik/acme.json
+    chmod 600 traefik/acme.json
+    
+    print_success "Directory structure created successfully."
+}
+
+# Function to create Docker network
+create_docker_network() {
+    print_info "Creating Docker network..."
+    
+    if docker network ls | grep -q "proxy"; then
+        print_warning "Network 'proxy' already exists, skipping creation."
+    else
+        docker network create proxy --driver bridge --subnet=172.18.0.0/24 --gateway=172.18.0.1
+        print_success "Docker network 'proxy' created successfully."
+    fi
+}
+
+# Function to create Nextcloud initialization script
+create_nextcloud_init_script() {
+    print_info "Creating Nextcloud initialization script..."
+    
+    cat > scripts/nextcloud-init.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "Installing bz2 extension for Nextcloud..."
+
+# Update package list
+apt-get update
+
+# Install bzip2 library and PHP extension
+apt-get install -y libbz2-dev
+
+# Install and enable PHP bz2 extension
+docker-php-ext-install bz2
+docker-php-ext-enable bz2
+
+# Clean up to reduce image size
+apt-get autoremove -y
+apt-get autoclean
+rm -rf /var/lib/apt/lists/*
+
+echo "bz2 extension installed successfully!"
+
+# Verify installation
+php -m | grep -i bz2 && echo "✓ bz2 extension is loaded" || echo "✗ Warning: bz2 extension not found"
+EOF
+    
+    chmod +x scripts/nextcloud-init.sh
+    print_success "Nextcloud initialization script created."
+}
+
+# Function to create watchtower post-update hooks
+create_watchtower_hooks() {
+    print_info "Creating watchtower post-update hooks..."
+    
+    cat > scripts/watchtower-hooks/nextcloud-post-update.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "Watchtower post-update hook: Reinstalling bz2 extension..."
+
+# Wait for container to be ready
+sleep 60
+
+# Install bz2 extension
+docker exec nextcloud-app bash -c "
+    set -e
+    echo 'Reinstalling bz2 extension after watchtower update...'
+    apt-get update
+    apt-get install -y libbz2-dev
+    docker-php-ext-install bz2
+    docker-php-ext-enable bz2
+    apt-get autoremove -y
+    apt-get autoclean
+    rm -rf /var/lib/apt/lists/*
+    echo 'bz2 extension reinstalled successfully!'
+    php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
+"
+
+echo "✓ Post-update hook completed"
+EOF
+    
+    chmod +x scripts/watchtower-hooks/nextcloud-post-update.sh
+    print_success "Watchtower hooks created successfully."
+}
+
+# Function to generate Traefik dashboard password hash
+generate_traefik_password_hash() {
+    local password="$1"
+    local username="admin"
+    
+    # Use htpasswd to generate the hash (Apache APR1 format)
+    if command -v htpasswd &> /dev/null; then
+        htpasswd -nbB "$username" "$password" | cut -d: -f2
+    else
+        # Fallback: use openssl to generate APR1 hash
+        echo "$password" | openssl passwd -apr1 -stdin
+    fi
+}
+
+# Function to update dynamic.yml with generated password hash
+update_dynamic_yml() {
+    local password_hash="$1"
+    
+    print_info "Creating dynamic.yml configuration..."
+    
+    cat > traefik/config/dynamic.yml << EOF
+# Dynamic configuration
+http:
+  middlewares:
+    # Security headers for all HTTPS traffic
+    secureHeaders:
+      headers:
+        sslRedirect: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 15552000
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customFrameOptionsValue: "SAMEORIGIN"
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+    
+    # Basic authentication for Traefik dashboard
+    user-auth:
+      basicAuth:
+        users:
+          - "admin:${password_hash}"
+    
+    # Strip /traefik prefix for dashboard access
+    traefik-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/traefik"
+    
+    # Nextcloud specific headers
+    nextcloud-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: "strict-origin-when-cross-origin"
+
+tls:
+  options:
+    default:
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+      minVersion: VersionTLS12
+      maxVersion: VersionTLS13
+EOF
+    
+    print_success "dynamic.yml configuration created."
+}
+
+# Function to create traefik.yml with email from .env
+create_traefik_yml() {
+    local letsencrypt_email="$1"
+    
+    print_info "Creating traefik.yml configuration..."
+    
+    cat > traefik/traefik.yml << EOF
+api:
+  dashboard: true
+  insecure: false
+  debug: false
+
+ping: {}
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+
+  websecure:
+    address: ":443"
+    http:
+      middlewares:
+        - secureHeaders@file
+      tls:
+        certResolver: letsencrypt
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: proxy
+  file:
+    watch: true
+    filename: /config/dynamic.yml
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: '${letsencrypt_email}'
+      storage: 'acme.json'
+      tlsChallenge: {}
+
+log:
+  level: INFO
+
+accessLog: {}
+EOF
+    
+    print_success "traefik.yml configuration created."
 }
 
 # Function to check if .env exists and ask user what to do
@@ -152,6 +397,20 @@ generate_env_file() {
     # Domain name
     DOMAIN_NAME=$(read_with_default "Domain name (e.g., nextcloud.example.com)" "")
     
+    # Let's Encrypt email
+    while true; do
+        LETSENCRYPT_EMAIL=$(read_with_default "Email for Let's Encrypt certificates" "")
+        if validate_email "$LETSENCRYPT_EMAIL"; then
+            break
+        else
+            print_error "Please enter a valid email address."
+        fi
+    done
+    
+    # Traefik dashboard password
+    print_info "Traefik dashboard password (for accessing /traefik/dashboard/)"
+    TRAEFIK_DASHBOARD_PASSWORD=$(read_password "Traefik dashboard password")
+    
     # MySQL root password
     print_info "MySQL root password (used for database administration)"
     MYSQL_ROOT_PASSWORD=$(read_password "MySQL root password")
@@ -176,9 +435,14 @@ generate_env_file() {
     SIGNALING_SECRET=`openssl rand --hex 32`
     INTERNAL_SECRET=`openssl rand --hex 32`
     
+    # Generate Watchtower API token
+    WATCHTOWER_API_TOKEN=$(generate_password 32)
+    
     # Create .env file
     cat > "$ENV_FILE" << EOF
 DOMAIN_NAME=$DOMAIN_NAME
+LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL
+TRAEFIK_DASHBOARD_PASSWORD=$TRAEFIK_DASHBOARD_PASSWORD
 MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
 MYSQL_PASSWORD=$MYSQL_PASSWORD
 NEXTCLOUD_ADMIN_USER=$NEXTCLOUD_ADMIN_USER
@@ -187,6 +451,15 @@ REDIS_PASSWORD=$REDIS_PASSWORD
 TURN_SECRET=$TURN_SECRET
 SIGNALING_SECRET=$SIGNALING_SECRET
 INTERNAL_SECRET=$INTERNAL_SECRET
+WATCHTOWER_API_TOKEN=$WATCHTOWER_API_TOKEN
+
+# Watchtower Email Notifications (Optional - uncomment and configure if needed)
+# WATCHTOWER_EMAIL_FROM=watchtower@$DOMAIN_NAME
+# WATCHTOWER_EMAIL_TO=admin@$DOMAIN_NAME
+# WATCHTOWER_EMAIL_SERVER=smtp.$DOMAIN_NAME
+# WATCHTOWER_EMAIL_PORT=587
+# WATCHTOWER_EMAIL_USER=watchtower@$DOMAIN_NAME
+# WATCHTOWER_EMAIL_PASSWORD=your-email-password
 EOF
     
     # Set appropriate permissions
@@ -194,6 +467,60 @@ EOF
     
     print_success "$ENV_FILE file has been created successfully!"
     print_warning "Make sure to keep this file secure as it contains sensitive passwords."
+    
+    # Generate configuration files using the new values
+    local password_hash=$(generate_traefik_password_hash "$TRAEFIK_DASHBOARD_PASSWORD")
+    update_dynamic_yml "$password_hash"
+    create_traefik_yml "$LETSENCRYPT_EMAIL"
+}
+
+# Function to install bz2 extension in running container
+install_bz2_extension() {
+    print_info "Installing bz2 extension in Nextcloud container..."
+    
+    local container_name="nextcloud-app"
+    local max_attempts=30
+    local attempt=1
+    
+    # Wait for container to be ready
+    while [ $attempt -le $max_attempts ]; do
+        if docker exec $container_name test -f /var/www/html/version.php 2>/dev/null; then
+            print_success "Nextcloud container is ready for bz2 installation"
+            break
+        fi
+        print_info "Waiting for Nextcloud container to be ready... (attempt $attempt/$max_attempts)"
+        sleep 10
+        ((attempt++))
+    done
+    
+    if [ $attempt -gt $max_attempts ]; then
+        print_error "Nextcloud container failed to start properly"
+        return 1
+    fi
+    
+    # Install bz2 extension
+    print_info "Installing bz2 extension..."
+    docker exec $container_name bash -c "
+        set -e
+        echo 'Installing bz2 extension...'
+        apt-get update
+        apt-get install -y libbz2-dev
+        docker-php-ext-install bz2
+        docker-php-ext-enable bz2
+        apt-get autoremove -y
+        apt-get autoclean
+        rm -rf /var/lib/apt/lists/*
+        echo 'bz2 extension installed successfully!'
+        php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
+    "
+    
+    if [ $? -eq 0 ]; then
+        print_success "bz2 extension installation completed successfully"
+        return 0
+    else
+        print_error "Failed to install bz2 extension"
+        return 1
+    fi
 }
 
 # Function to validate domain name
@@ -286,31 +613,46 @@ main() {
     check_docker
     echo
     
+    # Setup directory structure
+    setup_directories
+    echo
+    
+    # Create Docker network
+    create_docker_network
+    echo
+    
+    # Create utility scripts
+    create_nextcloud_init_script
+    create_watchtower_hooks
+    echo
+    
     if check_existing_env; then
         # User chose to keep existing configuration
         print_info "Using existing configuration from $ENV_FILE"
+        
+        # Still need to create config files if they don't exist
+        if [[ ! -f "traefik/config/dynamic.yml" ]] || [[ ! -f "traefik/traefik.yml" ]]; then
+            print_info "Configuration files missing, recreating them..."
+            
+            # Extract values from existing .env
+            source "$ENV_FILE"
+            local password_hash=$(generate_traefik_password_hash "$TRAEFIK_DASHBOARD_PASSWORD")
+            update_dynamic_yml "$password_hash"
+            create_traefik_yml "$LETSENCRYPT_EMAIL"
+        fi
     else
         # User chose to create new configuration or no .env exists
         generate_env_file
     fi
     
     echo
-    print_success "Configuration ready! You can now proceed with your Nextcloud installation."
+    print_success "Configuration ready! Starting Nextcloud installation..."
     print_info "The configuration is saved in $ENV_FILE"
-    
-    # Add your additional commands here
-    # For example:
-    # print_info "Running additional setup commands..."
-    # docker-compose up -d
-    # etc.
+    echo
 }
 
 # Run main function
 main "$@"
-
-# Adjusting permissions for letsencrypt
-touch traefik/acme.json
-chmod 600 traefik/acme.json
 
 # Start Docker Compose
 print_info "Starting Docker Compose..."
@@ -326,7 +668,17 @@ else
     exit 1
 fi
 
+# Install bz2 extension
+print_info "Installing bz2 extension..."
+if install_bz2_extension; then
+    print_success "bz2 extension installed successfully"
+else
+    print_error "Failed to install bz2 extension"
+    exit 1
+fi
+
 # Increase file handling in PHP
+print_info "Configuring PHP settings..."
 printf "php_value upload_max_filesize=16G
 php_value post_max_size=16G" >> ./app/.user.ini
 
@@ -342,7 +694,7 @@ opcache.jit => 1255
 opcache.jit_buffer_size => 128" >> ./app/.user.ini
 
 # Start Docker Compose again
-print_info "Starting Docker Compose..."
+print_info "Restarting Docker Compose with updated configuration..."
 docker compose up -d
 sleep 15
 
@@ -359,15 +711,32 @@ sleep 2
 docker restart nextcloud-traefik
 
 # Get domain name from .env file for final message
-DOMAIN_NAME=$(grep "^DOMAIN_NAME=" "$ENV_FILE" | cut -d'=' -f2)
-SIGNALING_SECRET=$(grep "^SIGNALING_SECRET=" "$ENV_FILE" | cut -d'=' -f2)
-TURN_SECRET=$(grep "^TURN_SECRET=" "$ENV_FILE" | cut -d'=' -f2)
+source "$ENV_FILE"
 
-print_info "Please note the following details for the Nextcloud Talk High-Performance Backend"
-print_info "Signaling server: wss://signal.$DOMAIN_NAME"
-print_info "Signaling secret: $SIGNALING_SECRET"
-
-print_info "Turn server: signal.$DOMAIN_NAME:3478"
-print_info "Turn secret: $TURN_SECRET"
-
-print_success "Nextcloud installation is complete. You can access it at https://$DOMAIN_NAME"
+print_success "========================================"
+print_success "  Nextcloud Installation Complete!"
+print_success "========================================"
+echo
+print_info "Access URLs:"
+print_info "  📱 Nextcloud: https://$DOMAIN_NAME"
+print_info "  🔧 Traefik Dashboard: https://$DOMAIN_NAME/traefik/dashboard/"
+print_info "  📞 Nextcloud Talk: https://signal.$DOMAIN_NAME"
+echo
+print_info "Credentials:"
+print_info "  👤 Nextcloud Admin: $NEXTCLOUD_ADMIN_USER"
+print_info "  🔑 Nextcloud Password: $NEXTCLOUD_ADMIN_PASSWORD"
+print_info "  🔐 Traefik Dashboard: admin / $TRAEFIK_DASHBOARD_PASSWORD"
+echo
+print_info "Nextcloud Talk High-Performance Backend Configuration:"
+print_info "  🔌 Signaling server: wss://signal.$DOMAIN_NAME"
+print_info "  🔐 Signaling secret: $SIGNALING_SECRET"
+print_info "  🌐 TURN server: signal.$DOMAIN_NAME:3478"
+print_info "  🔑 TURN secret: $TURN_SECRET"
+echo
+print_warning "Important Notes:"
+print_warning "  • Make sure your DNS points to this server"
+print_warning "  • Configure email settings in Talk app if needed"
+print_warning "  • Keep your .env file secure - it contains all passwords"
+print_warning "  • Check 'docker compose logs -f' for any issues"
+echo
+print_success "Your Nextcloud installation is ready to use! 🎉"

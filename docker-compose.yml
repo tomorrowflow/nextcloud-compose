@@ -6,6 +6,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: --transaction-isolation=READ-COMMITTED --innodb_read_only_compressed=OFF
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -17,6 +23,10 @@ services:
       - MYSQL_USER=nextcloud
       - MYSQL_INITDB_SKIP_TZINFO=1
       - MARIADB_AUTO_UPGRADE=1
+    labels:
+      # Autoheal and Watchtower labels
+      - autoheal=true
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - proxy
 
@@ -28,18 +38,34 @@ services:
       - "host.docker.internal:host-gateway"
     hostname: nextcloud-redis
     command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    labels:
+      # Autoheal and Watchtower labels
+      - autoheal=true
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - proxy
 
   nextcloud-app:
-    build:
-        context: .
-        dockerfile: Dockerfile.nextcloud
+    image: nextcloud:latest
     container_name: nextcloud-app
     restart: unless-stopped
     depends_on:
-      - nextcloud-db
-      - nextcloud-redis
+      nextcloud-db:
+        condition: service_healthy
+      nextcloud-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/status.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     environment:
       - TRUSTED_PROXIES=172.18.0.0/16
       - DEFAULT_PHONE_REGION=de
@@ -69,15 +95,19 @@ services:
       - traefik.http.routers.nextcloud.priority=5
       - traefik.http.services.nextcloud.loadbalancer.server.port=80
       - traefik.http.routers.nextcloud.tls.certresolver=letsencrypt
+      # Autoheal and Watchtower labels
+      - autoheal=true
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - proxy
 
   traefik:
-    build:
-        context: .
-        dockerfile: Dockerfile.traefik
+    image: traefik:latest
     container_name: "nextcloud-traefik"
     restart: unless-stopped
+    depends_on:
+      nextcloud-app:
+        condition: service_healthy
     security_opt:
       - "no-new-privileges:true"
     ports:
@@ -85,10 +115,11 @@ services:
       - "443:443"
       - "8080:8080"
     healthcheck:
-        test: ["CMD", "curl", "-f", "http://nextcloud-app:80/"]
+        test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/ping", "||", "exit", "1"]
         interval: 30s
         timeout: 10s
-        retries: 5
+        retries: 3
+        start_period: 30s
     volumes:
       - "/etc/localtime:/etc/localtime:ro"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
@@ -105,12 +136,9 @@ services:
       - traefik.http.routers.traefik-secure.middlewares=traefik-stripprefix@file,user-auth@file
       - traefik.http.routers.traefik-secure.priority=10
       - traefik.http.routers.traefik-secure.tls.certresolver=letsencrypt
-      # Redirect /traefik to /traefik/dashboard/
-      - traefik.http.routers.traefik-redirect.entrypoints=websecure
-      - traefik.http.routers.traefik-redirect.rule=Host(`${DOMAIN_NAME}`) && Path(`/traefik`)
-      - traefik.http.routers.traefik-redirect.middlewares=traefik-redirect@file,user-auth@file
-      - traefik.http.routers.traefik-redirect.priority=11
-      - traefik.http.routers.traefik-redirect.tls.certresolver=letsencrypt
+      # Autoheal and Watchtower labels
+      - autoheal=true
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - proxy
 
@@ -140,8 +168,89 @@ services:
       - traefik.http.routers.talk-hpf.priority=3
       - traefik.http.services.talk-hpf.loadbalancer.server.port=8081
       - traefik.http.routers.talk-hpf.tls.certresolver=letsencrypt
+      # Watchtower labels
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - proxy
+
+  # Docker Autoheal - Monitors and restarts unhealthy containers
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: nextcloud-autoheal
+    restart: unless-stopped
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=30
+      - AUTOHEAL_START_PERIOD=300
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=10
+      - TZ=Europe/Berlin
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - autoheal=false  # Don't monitor autoheal itself
+      - com.centurylinklabs.watchtower.enable=true
+
+  # Watchtower - Automatic container updates
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: nextcloud-watchtower
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Berlin
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_REMOVE_VOLUMES=false
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_INCLUDE_RESTARTING=false
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *  # Daily at 4 AM
+      - WATCHTOWER_NOTIFICATIONS=email
+      - WATCHTOWER_NOTIFICATION_EMAIL_FROM=${WATCHTOWER_EMAIL_FROM}
+      - WATCHTOWER_NOTIFICATION_EMAIL_TO=${WATCHTOWER_EMAIL_TO}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER=${WATCHTOWER_EMAIL_SERVER}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=${WATCHTOWER_EMAIL_PORT}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER=${WATCHTOWER_EMAIL_USER}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${WATCHTOWER_EMAIL_PASSWORD}
+      - WATCHTOWER_NOTIFICATION_EMAIL_DELAY=2
+      - WATCHTOWER_LABEL_ENABLE=true  # Only update containers with watchtower.enable=true
+      - WATCHTOWER_ROLLING_RESTART=true
+      - WATCHTOWER_LIFECYCLE_HOOKS=true
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts:/scripts:ro
+    labels:
+      - autoheal=false  # Don't monitor watchtower itself
+      - com.centurylinklabs.watchtower.enable=false  # Don't update watchtower automatically
+
+  # Watchtower Companion - Handles post-update tasks
+  watchtower-companion:
+    image: alpine:latest
+    container_name: nextcloud-watchtower-companion
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Berlin
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts:/scripts:ro
+    command: |
+      sh -c "
+        apk add --no-cache docker-cli curl jq &&
+        while true; do
+          # Monitor for container recreations
+          docker events --filter 'event=start' --filter 'container=nextcloud-app' --format '{{.Actor.Attributes.name}}' | while read container; do
+            echo 'Detected Nextcloud container restart, checking if update occurred...'
+            sleep 60  # Wait for container to fully start
+            if [ -f /scripts/watchtower-hooks/nextcloud-post-update.sh ]; then
+              echo 'Running post-update hook...'
+              /scripts/watchtower-hooks/nextcloud-post-update.sh
+            fi
+          done
+          sleep 10
+        done
+      "
+    labels:
+      - autoheal=false
+      - com.centurylinklabs.watchtower.enable=false
     
 networks:
   proxy:
