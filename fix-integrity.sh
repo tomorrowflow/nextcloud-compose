@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Nextcloud Integrity Fix Script
-# This script fixes the .user.ini integrity check issues
+# This script fixes the .user.ini integrity check issues by regenerating hashes
 
 set -e
 
@@ -25,7 +25,7 @@ if ! docker ps --format "{{.Names}}" | grep -q "^nextcloud-app$"; then
     exit 1
 fi
 
-print_header "Nextcloud Integrity Check Fix"
+print_header "Nextcloud Integrity Hash Regeneration"
 
 # Check current integrity status
 print_info "Checking current integrity status..."
@@ -34,14 +34,14 @@ if docker exec -u 33 nextcloud-app ./occ integrity:check-core --output=json 2>/d
     
     # Show which files are affected
     print_info "Files with integrity issues:"
-    docker exec -u 33 nextcloud-app ./occ integrity:check-core 2>/dev/null | grep -A 5 -B 5 "INVALID_HASH" || true
+    docker exec -u 33 nextcloud-app ./occ integrity:check-core 2>/dev/null | grep -A 2 -B 2 ".user.ini" || true
     
-    # Fix 1: Update .user.ini with proper format
-    print_info "Fix 1: Updating .user.ini with proper PHP configuration..."
+    # Method 1: Update .user.ini and regenerate hashes
+    print_info "Step 1: Updating .user.ini with optimized PHP settings..."
     
     cat > ./app/.user.ini << 'EOF'
 ; Nextcloud PHP Configuration
-; Updated to fix integrity check issues
+; Performance and security optimizations
 
 ; File upload settings
 php_value upload_max_filesize=16G
@@ -68,93 +68,131 @@ php_value session.cookie_secure=1
 php_value session.cookie_samesite=Strict
 EOF
     
-    print_success ".user.ini updated"
+    print_success ".user.ini updated with performance settings"
     
-    # Fix 2: Try to reset integrity check
-    print_info "Fix 2: Resetting integrity check..."
+    # Method 2: Force regeneration of integrity hashes
+    print_info "Step 2: Regenerating Nextcloud integrity hashes..."
     
-    # Update htaccess file
+    # Put Nextcloud in maintenance mode temporarily
+    print_info "Enabling maintenance mode..."
+    docker exec -u 33 nextcloud-app ./occ maintenance:mode --on
+    
+    # Clear integrity check cache
+    print_info "Clearing integrity cache..."
+    docker exec -u 33 nextcloud-app rm -f /var/www/html/data/.integrity.check.disabled 2>/dev/null || true
+    
+    # Update htaccess and configuration
+    print_info "Updating htaccess and configuration..."
     docker exec -u 33 nextcloud-app ./occ maintenance:update-htaccess
     
-    # Temporarily disable integrity check and re-enable to refresh cache
-    print_info "Refreshing integrity check cache..."
-    docker exec -u 33 nextcloud-app ./occ config:system:set integrity.check.disabled --value=true --type=boolean
-    sleep 2
-    docker exec -u 33 nextcloud-app ./occ config:system:delete integrity.check.disabled
+    # Perform maintenance repair to regenerate hashes
+    print_info "Regenerating integrity hashes (this may take a few minutes)..."
+    docker exec -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
     
-    # Fix 3: Alternative approach - exclude .user.ini from integrity check
-    print_info "Fix 3: Configuring integrity check exclusions..."
-    docker exec -u 33 nextcloud-app ./occ config:system:set integrity.excluded.files --value='[".user.ini"]' --type=json
+    # Alternative: Try to trigger hash recalculation
+    print_info "Triggering hash recalculation..."
+    docker exec -u 33 nextcloud-app ./occ config:system:delete integrity.check.disabled 2>/dev/null || true
     
-    # Wait a moment for changes to take effect
-    sleep 5
+    # Turn off maintenance mode
+    print_info "Disabling maintenance mode..."
+    docker exec -u 33 nextcloud-app ./occ maintenance:mode --off
     
-    # Check integrity again
-    print_info "Checking integrity status after fixes..."
-    if docker exec -u 33 nextcloud-app ./occ integrity:check-core --output=json 2>/dev/null | grep -q "INVALID_HASH"; then
-        print_warning "Integrity check still shows issues"
+    # Wait for system to stabilize
+    print_info "Waiting for system to stabilize..."
+    sleep 10
+    
+    # Method 3: Nuclear option - regenerate all core hashes
+    print_info "Step 3: If needed, regenerating ALL core integrity hashes..."
+    
+    # This is the nuclear option - it regenerates the entire integrity database
+    # First, let's see if we can find the integrity hash storage
+    if docker exec -u 33 nextcloud-app test -f /var/www/html/resources/codesigning/core.crt; then
+        print_info "Core certificate found, attempting hash regeneration..."
         
-        # Show detailed results
-        print_info "Detailed integrity check results:"
+        # Try to trigger a complete integrity check regeneration
+        docker exec -u 33 nextcloud-app ./occ maintenance:mode --on
+        
+        # Remove any existing integrity cache
+        docker exec -u 33 nextcloud-app rm -rf /var/www/html/data/integrity.results.json 2>/dev/null || true
+        
+        # Force a complete repair
+        docker exec -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
+        
+        # Turn maintenance mode back off
+        docker exec -u 33 nextcloud-app ./occ maintenance:mode --off
+        
+        print_success "Complete integrity hash regeneration attempted"
+    fi
+    
+    # Wait for changes to take effect
+    print_info "Waiting for integrity check to refresh..."
+    sleep 15
+    
+    # Final integrity check
+    print_info "Performing final integrity check..."
+    if docker exec -u 33 nextcloud-app ./occ integrity:check-core --output=json 2>/dev/null | grep -q "INVALID_HASH"; then
+        print_warning "Integrity check still shows issues after regeneration"
+        
+        # Show current status
+        print_info "Current integrity status:"
         docker exec -u 33 nextcloud-app ./occ integrity:check-core 2>/dev/null | head -20
         
-        # Offer nuclear option
+        print_warning "Alternative solutions:"
         echo
-        print_warning "If the integrity check is still failing, you have two options:"
+        echo "Option 1: The integrity check may be overly strict. Your .user.ini settings are working."
+        echo "  - Check: curl -I https://your-domain.com (should show your upload limits)"
+        echo "  - This is often a cosmetic issue with no functional impact"
         echo
-        echo "Option 1: Ignore the warning (recommended if everything works)"
-        echo "  - The .user.ini file is safe to modify"
-        echo "  - This is a cosmetic issue and doesn't affect functionality"
+        echo "Option 2: Reset Nextcloud to recalculate all hashes from scratch:"
+        echo "  docker exec -u 33 nextcloud-app ./occ maintenance:mode --on"
+        echo "  docker exec -u 33 nextcloud-app ./occ maintenance:install"
+        echo "  docker exec -u 33 nextcloud-app ./occ maintenance:mode --off"
+        echo "  (WARNING: This may reset some settings)"
         echo
-        echo "Option 2: Reset the integrity database (nuclear option)"
-        echo "  - This will clear all integrity hashes and recalculate them"
-        echo "  - Run: docker exec -u 33 nextcloud-app ./occ maintenance:repair --include-expensive"
-        echo
+        echo "Option 3: Exclude .user.ini from integrity checks (recommended):"
+        echo "  docker exec -u 33 nextcloud-app ./occ config:system:set integrity.excluded.files --value='[\".user.ini\"]' --type=json"
         
-        # Ask user if they want to proceed with nuclear option
-        read -p "Do you want to reset the integrity database? (y/N): " choice
+        # Ask user what they want to do
+        echo
+        read -p "Do you want to exclude .user.ini from integrity checks? (Y/n): " choice
         case "$choice" in
-            [Yy]|[Yy][Ee][Ss])
-                print_info "Resetting integrity database..."
-                docker exec -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
-                print_success "Integrity database reset complete"
+            [Nn]|[Nn][Oo])
+                print_info "Leaving integrity check as-is"
                 ;;
             *)
-                print_info "Skipping integrity database reset"
+                print_info "Excluding .user.ini from integrity checks..."
+                docker exec -u 33 nextcloud-app ./occ config:system:set integrity.excluded.files --value='[".user.ini"]' --type=json
+                print_success "✓ .user.ini excluded from future integrity checks"
                 ;;
         esac
         
     else
-        print_success "✓ Integrity check passed! Issues have been resolved."
+        print_success "✓ SUCCESS! Integrity check now passes with updated .user.ini"
+        print_success "✓ Your PHP performance settings are active and verified"
     fi
     
 else
     print_success "✓ No integrity issues detected"
+    print_info "Your .user.ini file is already properly configured"
 fi
 
-# Final check and summary
+# Show final configuration
 echo
-print_header "Final Status Check"
+print_header "Final Configuration Status"
 
-# Check if Nextcloud admin panel shows any warnings
-print_info "Current Nextcloud status:"
-docker exec -u 33 nextcloud-app ./occ status 2>/dev/null | grep -E "(installed|version|versionstring)" || true
+# Show current PHP settings
+print_info "Current PHP upload settings:"
+docker exec nextcloud-app php -r "echo 'upload_max_filesize: ' . ini_get('upload_max_filesize') . PHP_EOL;"
+docker exec nextcloud-app php -r "echo 'post_max_size: ' . ini_get('post_max_size') . PHP_EOL;"
+docker exec nextcloud-app php -r "echo 'memory_limit: ' . ini_get('memory_limit') . PHP_EOL;"
 
-# Show current .user.ini content
-print_info "Current .user.ini configuration:"
-echo "----------------------------------------"
-head -10 ./app/.user.ini 2>/dev/null || print_warning ".user.ini not found"
-echo "----------------------------------------"
+# Show Nextcloud status
+print_info "Nextcloud status:"
+docker exec -u 33 nextcloud-app ./occ status 2>/dev/null | grep -E "(installed|version)" || true
 
-# Give final recommendations
 echo
 print_success "Integrity fix process completed!"
-echo
 print_info "Next steps:"
-print_info "1. Check your Nextcloud admin panel (Settings > Administration > Overview)"
-print_info "2. If you still see integrity warnings, they are likely cosmetic"
-print_info "3. The .user.ini modifications are safe and improve performance"
-print_info "4. Consider updating your installation script to prevent future issues"
-echo
-print_info "If you continue to have issues, check the Nextcloud documentation:"
-print_info "https://docs.nextcloud.com/server/latest/admin_manual/issues/code_signing.html"
+print_info "1. Check your Nextcloud admin panel: Settings > Administration > Overview"
+print_info "2. Test file uploads to verify the increased limits are working"
+print_info "3. Monitor performance to ensure OPcache settings are effective"

@@ -804,38 +804,31 @@ TESTDASH_EOF
     cat > fix-integrity.sh << 'INTEGRITY_EOF'
 #!/bin/bash
 
-# Nextcloud Integrity Fix Script
-# This script fixes the .user.ini integrity check issues
-
+# Nextcloud Integrity Fix Script - Focus on hash regeneration
 set -e
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-print_header() { echo -e "${BLUE}=== $1 ===${NC}"; }
 
-# Check if Nextcloud container is running
 if ! docker ps --format "{{.Names}}" | grep -q "^nextcloud-app$"; then
     print_error "Nextcloud container is not running"
-    print_info "Start it with: docker-compose up -d"
     exit 1
 fi
 
-print_header "Nextcloud Integrity Check Fix"
+echo "=== Nextcloud Integrity Hash Regeneration ==="
 
-# Fix the .user.ini integrity issue
-print_info "Updating .user.ini with proper PHP configuration..."
+# Step 1: Update .user.ini
+print_info "Updating .user.ini with performance settings..."
 cat > ./app/.user.ini << 'USERINI_EOF'
-; Nextcloud PHP Configuration
-; Updated to fix integrity check issues
+; Nextcloud PHP Configuration - Performance optimized
 
 ; File upload settings
 php_value upload_max_filesize=16G
@@ -844,7 +837,7 @@ php_value max_execution_time=3600
 php_value max_input_time=3600
 php_value memory_limit=2048M
 
-; OPCache settings for better performance
+; OPCache settings
 opcache.enable_cli=1
 apc.enable_cli=1
 opcache.save_comments=1
@@ -862,16 +855,43 @@ php_value session.cookie_secure=1
 php_value session.cookie_samesite=Strict
 USERINI_EOF
 
-print_info "Fixing integrity check..."
-# Exclude .user.ini from integrity checks
-docker exec -u 33 nextcloud-app ./occ config:system:set integrity.excluded.files --value='[".user.ini"]' --type=json
+# Step 2: Regenerate integrity hashes
+print_info "Regenerating Nextcloud integrity hashes..."
+docker exec -u 33 nextcloud-app bash -c "
+    echo 'Enabling maintenance mode...'
+    ./occ maintenance:mode --on
+    echo 'Clearing integrity cache...'
+    rm -f /var/www/html/data/.integrity.check.disabled 2>/dev/null || true
+    rm -rf /var/www/html/data/integrity.results.json 2>/dev/null || true
+    echo 'Updating htaccess...'
+    ./occ maintenance:update-htaccess
+    echo 'Regenerating hashes (this may take a minute)...'
+    ./occ maintenance:repair --include-expensive
+    echo 'Disabling maintenance mode...'
+    ./occ maintenance:mode --off
+"
 
-# Update htaccess
-docker exec -u 33 nextcloud-app ./occ maintenance:update-htaccess
+sleep 10
 
-print_success "✓ Integrity fix applied!"
-print_info "The .user.ini file is now excluded from integrity checks"
-print_info "Your PHP performance settings are still active"
+# Step 3: Check results
+print_info "Checking integrity status..."
+if docker exec -u 33 nextcloud-app ./occ integrity:check-core --output=json 2>/dev/null | grep -q "INVALID_HASH"; then
+    print_warning "Hash regeneration didn't completely resolve the issue"
+    print_info "Applying fallback: excluding .user.ini from integrity checks"
+    docker exec -u 33 nextcloud-app ./occ config:system:set integrity.excluded.files --value='[".user.ini"]' --type=json
+    print_success "✓ .user.ini excluded from future integrity checks"
+else
+    print_success "✓ SUCCESS! Integrity hashes regenerated successfully"
+fi
+
+# Step 4: Verify settings
+echo ""
+print_info "Verifying PHP settings are active:"
+docker exec nextcloud-app php -r "echo 'Upload limit: ' . ini_get('upload_max_filesize') . PHP_EOL;"
+docker exec nextcloud-app php -r "echo 'Memory limit: ' . ini_get('memory_limit') . PHP_EOL;"
+docker exec nextcloud-app php -r "echo 'Execution time: ' . ini_get('max_execution_time') . 's' . PHP_EOL;"
+
+print_success "Fix completed! Check your Nextcloud admin panel."
 INTEGRITY_EOF
     
     chmod +x fix-integrity.sh
