@@ -166,6 +166,9 @@ Run the built-in troubleshooting scripts:
 
 # Specific dashboard routing test
 ./test-dashboard.sh
+
+# Fix Nextcloud integrity check issues
+./fix-integrity.sh
 ```
 
 The troubleshooting script checks:
@@ -181,6 +184,11 @@ The dashboard test script specifically checks:
 - Authentication middleware
 - Route priorities
 - API endpoint access
+
+The integrity fix script resolves:
+- `.user.ini` integrity check failures
+- PHP configuration conflicts
+- File checksum mismatches
 
 ### Check Container Status
 ```bash
@@ -269,6 +277,8 @@ docker-compose restart nextcloud-app
    # Verify password hash in dynamic.yml
    docker exec nextcloud-traefik ls -la /config/
    ```
+
+   **Note**: This issue occurs when PHP configuration files are modified after Nextcloud calculates its integrity hashes. The `.user.ini` file is safe to modify for performance tuning, but Nextcloud flags it as a security concern. Excluding it from integrity checks is the recommended solution.
 
 ### Traefik Troubleshooting
 
