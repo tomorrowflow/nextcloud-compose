@@ -503,27 +503,6 @@ monitor_nextcloud_initialization() {
     
     # Clean up
     kill $log_pid 2>/dev/null || true
-    
-    if [ -f "$init_flag" ]; then
-        # Stop containers
-        sleep 10
-        docker compose down
-        if [ $? -eq 0 ]; then
-            print_success "Docker containers stopped successfully"
-        else
-            print_error "Failed to stop Docker containers"
-            rm -f "$init_flag"
-            exit 1
-        fi
-        
-        sleep 15
-        rm -f "$init_flag"
-        return 0
-    else
-        print_error "Timeout waiting for Nextcloud initialization or process failed"
-        rm -f "$init_flag" 2>/dev/null || true
-        return 1
-    fi
 }
 
 # Main execution
@@ -548,12 +527,11 @@ main() {
     # Create utility scripts
     create_watchtower_hooks
     
-    # Make troubleshoot and test-dashboard scripts executable
-    
+    # Make scripts executable
     chmod +x troubleshoot.sh
-    
     chmod +x test-dashboard.sh
-    
+    chmod +x hooks/pre-installation/01-configure-php.sh
+    chmod +x hooks/pre-installation/02-install-bz2.sh
     echo
     
     if check_existing_env; then
@@ -598,14 +576,9 @@ else
     exit 1
 fi
 
-# Restart containers after initialization monitoring
-print_info "Restarting containers after initialization..."
-docker compose up -d
-sleep 30
-
 # Run Nextcloud configuration commands
 print_info "Waiting for Nextcloud to be ready for final configuration..."
-sleep 60
+sleep 30
 
 # Check Traefik status before final configuration
 print_info "Checking Traefik container status..."
@@ -668,10 +641,6 @@ while [ $traefik_attempt -le $traefik_health_attempts ]; do
         break
     fi
 done
-
-print_info "Restarting Traefik to ensure proper routing..."
-docker restart nextcloud-traefik
-sleep 10
 
 # Get domain name from .env file for final message
 if [ -f "$ENV_FILE" ]; then
