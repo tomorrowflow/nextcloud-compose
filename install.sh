@@ -531,7 +531,6 @@ main() {
     chmod +x troubleshoot.sh
     chmod +x test-dashboard.sh
     chmod +x hooks/pre-installation/01-configure-php.sh
-    chmod +x hooks/pre-installation/02-install-bz2.sh
     echo
     
     if check_existing_env; then
