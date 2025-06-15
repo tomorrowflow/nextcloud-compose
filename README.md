@@ -65,19 +65,22 @@ After installation, you can access:
 
 ```
 nextcloud-docker/
-├── docker-compose.yml          # Main Docker Compose configuration
-├── install.sh                  # Installation script
-├── .env                       # Environment variables (created by installer)
+├── docker-compose.yml        # Main Docker Compose configuration
+├── install.sh                # Installation script
+├── .env                      # Environment variables (created by installer)
+├── .env.example              # Example environment variables (copy to .env and adjust to your needs)
+├── fix-integrity.sh          # Change handling of .user.ini to exclude from integrity check
+├── troubleshoot.sh           # Nextcloud docker troubleshooting
+├── test-dashboard.sh         # Traefik dashboard testing
 ├── traefik/
 │   ├── traefik.yml           # Traefik static configuration
-│   ├── config/
+│   ├── config
 │   │   └── dynamic.yml       # Traefik dynamic configuration
 │   ├── letsencrypt/          # SSL certificates storage
 │   └── acme.json             # Let's Encrypt account info
 ├── hooks/
 │   └── pre-installation/     # Official Nextcloud pre-installation hooks
-│       ├── 01-configure-php.sh    # PHP performance configuration
-│       └── 02-install-bz2.sh      # bz2 extension installation
+│       └── 01-configure-php.sh    # PHP performance configuration
 ├── scripts/
 │   ├── nextcloud-init.sh     # Nextcloud initialization script (legacy)
 │   └── watchtower-hooks/
