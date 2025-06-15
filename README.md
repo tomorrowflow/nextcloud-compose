@@ -9,9 +9,11 @@ A comprehensive, hands-free Nextcloud installation using Docker Compose with Tra
 - **Reverse Proxy**: Traefik for routing and load balancing
 - **Auto-healing**: Automatically restarts failed containers
 - **Auto-updates**: Watchtower keeps containers updated with latest images
-- **High Performance**: Redis caching and optimized PHP settings
+- **Automatic Updates**: Watchtower keeps containers updated with latest images
+- **High Performance**: Redis caching, OPcache, and optimized PHP settings via official pre-installation hooks
 - **Video Calls**: Nextcloud Talk with high-performance backend
 - **Security**: Strong passwords, secure headers, and proper permissions
+- **Integrity Check Compliance**: PHP configuration via official Nextcloud pre-installation hooks (no integrity conflicts)
 
 ## 📋 Prerequisites
 
@@ -70,10 +72,14 @@ nextcloud-docker/
 │   │   └── dynamic.yml        # Traefik dynamic configuration
 │   ├── letsencrypt/           # SSL certificates storage
 │   └── acme.json              # Let's Encrypt account info
+├── hooks/
+│   └── pre-installation/      # Official Nextcloud pre-installation hooks
+│       ├── 01-configure-php.sh   # PHP performance configuration
+│       └── 02-install-bz2.sh     # bz2 extension installation
 ├── scripts/
-│   ├── nextcloud-init.sh      # Nextcloud initialization script
+│   ├── nextcloud-init.sh      # Nextcloud initialization script (legacy)
 │   └── watchtower-hooks/
-│       └── nextcloud-post-update.sh  # Post-update hook
+│       └── nextcloud-post-update.sh  # Post-update hook for watchtower
 ├── app/                       # Nextcloud application files
 ├── data/                      # Nextcloud user data
 └── database/                  # MySQL/MariaDB data
@@ -95,6 +101,45 @@ NEXTCLOUD_ADMIN_USER=admin
 NEXTCLOUD_ADMIN_PASSWORD=secure-password
 # ... and more
 ```
+
+### PHP Performance Configuration
+
+PHP settings are configured via **official Nextcloud pre-installation hooks** to ensure optimal performance without integrity check conflicts:
+
+```bash
+# Pre-installation hooks are located in:
+./hooks/pre-installation/01-configure-php.sh    # PHP performance settings
+./hooks/pre-installation/02-install-bz2.sh      # bz2 extension installation
+```
+
+Key optimizations applied:
+- **File upload limits**: 16GB upload/post size
+- **Memory optimization**: 2GB PHP memory limit
+- **Execution time**: 3600 seconds for large operations
+- **OPcache tuning**: JIT enabled, 128MB cache, 10000 files
+- **Session security**: HTTPOnly, Secure, SameSite cookies
+
+This approach:
+- ✅ **No integrity check conflicts** - Applied before Nextcloud initialization
+- ✅ **Official Nextcloud method** - Uses documented pre-installation hooks
+- ✅ **Watchtower compatible** - Persists through container updates
+- ✅ **Clean architecture** - Follows Docker and Nextcloud best practices
+
+#### Alternative Configuration Methods
+
+If you need to modify PHP settings, you can:
+
+1. **Edit pre-installation hooks** (recommended):
+   ```bash
+   # Edit ./hooks/pre-installation/01-configure-php.sh
+   # Restart containers: docker-compose down && docker-compose up -d
+   ```
+
+2. **Volume-mount custom PHP configuration**:
+   ```yaml
+   volumes:
+     - ./custom-php.ini:/usr/local/etc/php/conf.d/99-custom.ini:ro
+   ```
 
 ### Watchtower Email Notifications (Optional)
 
@@ -167,8 +212,11 @@ Run the built-in troubleshooting scripts:
 # Specific dashboard routing test
 ./test-dashboard.sh
 
-# Fix Nextcloud integrity check issues
-./fix-integrity.sh
+# Fix Nextcloud integrity check issues (.user.ini)
+./fix-userini-integrity.sh
+
+# Alternative PHP configuration methods
+./alternative-php-config.sh
 ```
 
 The troubleshooting script checks:
@@ -185,10 +233,11 @@ The dashboard test script specifically checks:
 - Route priorities
 - API endpoint access
 
-The integrity fix script resolves:
+The integrity fix scripts resolve:
 - `.user.ini` integrity check failures
 - PHP configuration conflicts
 - File checksum mismatches
+- Alternative configuration methods
 
 ### Check Container Status
 ```bash
