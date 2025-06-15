@@ -84,8 +84,9 @@ services:
     volumes:
       - ./app:/var/www/html
       - ./data:/var/www/html/data
-      # OFFICIAL: Pre-installation hooks for PHP configuration and extensions
+      # Pre-installation hooks for PHP configuration and extensions
       - ./hooks/pre-installation:/docker-entrypoint-hooks.d/pre-installation:ro
+
     expose:
       - "80"
     labels:

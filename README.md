@@ -1,28 +1,27 @@
-# Nextcloud Docker Installation with Traefik
+# Nextcloud Docker Compose Setup
 
 A comprehensive, hands-free Nextcloud installation using Docker Compose with Traefik as reverse proxy, including automatic updates and health monitoring.
 
-## 🚀 Features
+## ✨ Features
 
 - **Automated Installation**: Single script setup with interactive configuration
 - **SSL Certificates**: Automatic Let's Encrypt certificate generation and renewal
 - **Reverse Proxy**: Traefik for routing and load balancing
 - **Auto-healing**: Automatically restarts failed containers
 - **Auto-updates**: Watchtower keeps containers updated with latest images
-- **Automatic Updates**: Watchtower keeps containers updated with latest images
-- **High Performance**: Redis caching, OPcache, and optimized PHP settings via official pre-installation hooks
+- **High Performance**: Redis caching, OPcache, and optimized PHP settings via **official pre-installation hooks**
 - **Video Calls**: Nextcloud Talk with high-performance backend
 - **Security**: Strong passwords, secure headers, and proper permissions
-- **Integrity Check Compliance**: PHP configuration via official Nextcloud pre-installation hooks (no integrity conflicts)
+- **✅ Integrity Check Compliance**: PHP configuration via official Nextcloud pre-installation hooks (no integrity conflicts)
 
-## 📋 Prerequisites
+## 🛠️ Requirements
 
 - **Docker**: Version 20.10 or higher
 - **Docker Compose**: Version 2.0 or higher
 - **Domain Name**: Pointing to your server's IP address
 - **Ports**: 80, 443, 3478, 8080, 8081 available
 
-## 🛠️ Quick Installation
+## 🚀 Quick Start
 
 1. **Clone or download the files:**
    ```bash
@@ -40,24 +39,27 @@ A comprehensive, hands-free Nextcloud installation using Docker Compose with Tra
    ./install.sh
    ```
 
-4. **Follow the interactive prompts** to configure:
+4. **Follow the interactive prompts to configure:**
    - Domain name
    - Let's Encrypt email
    - Traefik dashboard password
    - Database passwords
    - Nextcloud admin credentials
 
-5. **Wait for installation to complete** (5-10 minutes)
+5. **Start the services:**
+   ```bash
+   docker-compose up -d
+   ```
 
-## 🌐 Access Points
+6. **Wait for installation to complete (5-10 minutes)**
 
 After installation, you can access:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **Nextcloud** | `https://your-domain.com` | Check `.env` file |
-| **Traefik Dashboard** | `https://your-domain.com/traefik/dashboard/` | `admin` / (from `.env`) |
-| **Nextcloud Talk** | `https://signal.your-domain.com` | Same as Nextcloud |
+| Nextcloud | https://your-domain.com | Check .env file |
+| Traefik Dashboard | https://your-domain.com/traefik/dashboard/ | admin / (from .env) |
+| Nextcloud Talk | https://signal.your-domain.com | Same as Nextcloud |
 
 ## 📁 Directory Structure
 
@@ -65,33 +67,31 @@ After installation, you can access:
 nextcloud-docker/
 ├── docker-compose.yml          # Main Docker Compose configuration
 ├── install.sh                  # Installation script
-├── .env                        # Environment variables (created by installer)
+├── .env                       # Environment variables (created by installer)
 ├── traefik/
-│   ├── traefik.yml            # Traefik static configuration
+│   ├── traefik.yml           # Traefik static configuration
 │   ├── config/
-│   │   └── dynamic.yml        # Traefik dynamic configuration
-│   ├── letsencrypt/           # SSL certificates storage
-│   └── acme.json              # Let's Encrypt account info
+│   │   └── dynamic.yml       # Traefik dynamic configuration
+│   ├── letsencrypt/          # SSL certificates storage
+│   └── acme.json             # Let's Encrypt account info
 ├── hooks/
-│   └── pre-installation/      # Official Nextcloud pre-installation hooks
-│       ├── 01-configure-php.sh   # PHP performance configuration
-│       └── 02-install-bz2.sh     # bz2 extension installation
+│   └── pre-installation/     # Official Nextcloud pre-installation hooks
+│       ├── 01-configure-php.sh    # PHP performance configuration
+│       └── 02-install-bz2.sh      # bz2 extension installation
 ├── scripts/
-│   ├── nextcloud-init.sh      # Nextcloud initialization script (legacy)
+│   ├── nextcloud-init.sh     # Nextcloud initialization script (legacy)
 │   └── watchtower-hooks/
-│       └── nextcloud-post-update.sh  # Post-update hook for watchtower
-├── app/                       # Nextcloud application files
-├── data/                      # Nextcloud user data
-└── database/                  # MySQL/MariaDB data
+│       └── nextcloud-post-update.sh # Post-update hook for watchtower
+├── app/                      # Nextcloud application files
+├── data/                     # Nextcloud user data
+└── database/                 # MySQL/MariaDB data
 ```
 
-## 🔧 Configuration
-
-### Environment Variables
+## ⚙️ Configuration
 
 All configuration is stored in the `.env` file created during installation:
 
-```bash
+```env
 DOMAIN_NAME=your-domain.com
 LETSENCRYPT_EMAIL=admin@your-domain.com
 TRAEFIK_DASHBOARD_PASSWORD=secure-password
@@ -102,7 +102,9 @@ NEXTCLOUD_ADMIN_PASSWORD=secure-password
 # ... and more
 ```
 
-### PHP Performance Configuration
+## 🏎️ Performance Optimization
+
+### Official Pre-installation Hooks Method ✅
 
 PHP settings are configured via **official Nextcloud pre-installation hooks** to ensure optimal performance without integrity check conflicts:
 
@@ -112,12 +114,14 @@ PHP settings are configured via **official Nextcloud pre-installation hooks** to
 ./hooks/pre-installation/02-install-bz2.sh      # bz2 extension installation
 ```
 
-Key optimizations applied:
-- **File upload limits**: 16GB upload/post size
-- **Memory optimization**: 2GB PHP memory limit
-- **Execution time**: 3600 seconds for large operations
-- **OPcache tuning**: JIT enabled, 128MB cache, 10000 files
-- **Session security**: HTTPOnly, Secure, SameSite cookies
+**Key optimizations applied:**
+- File upload limits: 16GB upload/post size
+- Memory optimization: 2GB PHP memory limit  
+- Execution time: 3600 seconds for large operations
+- OPcache tuning: JIT enabled, 128MB cache, 10000 files
+- Session security: HTTPOnly, Secure, SameSite cookies
+
+### Why Pre-installation Hooks?
 
 This approach:
 - ✅ **No integrity check conflicts** - Applied before Nextcloud initialization
@@ -125,27 +129,28 @@ This approach:
 - ✅ **Watchtower compatible** - Persists through container updates
 - ✅ **Clean architecture** - Follows Docker and Nextcloud best practices
 
-#### Alternative Configuration Methods
+## 🛠️ Customizing PHP Settings
 
 If you need to modify PHP settings, you can:
 
-1. **Edit pre-installation hooks** (recommended):
+1. **Edit pre-installation hooks (recommended):**
    ```bash
    # Edit ./hooks/pre-installation/01-configure-php.sh
-   # Restart containers: docker-compose down && docker-compose up -d
+   # Restart containers:
+   docker-compose down && docker-compose up -d
    ```
 
-2. **Volume-mount custom PHP configuration**:
+2. **Volume-mount custom PHP configuration:**
    ```yaml
    volumes:
      - ./custom-php.ini:/usr/local/etc/php/conf.d/99-custom.ini:ro
    ```
 
-### Watchtower Email Notifications (Optional)
+## 📧 Email Notifications
 
 To receive email notifications about updates, uncomment and configure these variables in `.env`:
 
-```bash
+```env
 WATCHTOWER_EMAIL_FROM=watchtower@your-domain.com
 WATCHTOWER_EMAIL_TO=admin@your-domain.com
 WATCHTOWER_EMAIL_SERVER=smtp.your-domain.com
@@ -166,14 +171,12 @@ The installation includes comprehensive health monitoring:
 
 ## 🔄 Automatic Updates
 
-**Watchtower** automatically updates containers daily at 4 AM:
+Watchtower automatically updates containers daily at 4 AM:
 
 - Only updates containers with the `watchtower.enable=true` label
 - Uses rolling updates to minimize downtime
 - Automatically reinstalls PHP extensions (like bz2) after Nextcloud updates
 - Sends email notifications about updates (if configured)
-
-### Manual Updates
 
 To update immediately:
 ```bash
@@ -193,23 +196,22 @@ docker-compose up -d
 
 The installation includes a high-performance backend for Nextcloud Talk:
 
-1. **Enable Talk app** (done automatically by installer)
-2. **Configure High-Performance Backend** in Nextcloud admin settings:
+1. Enable Talk app (done automatically by installer)
+2. Configure High-Performance Backend in Nextcloud admin settings:
    - **Signaling server**: `wss://signal.your-domain.com`
    - **Signaling secret**: (found in `.env` file)
    - **TURN server**: `signal.your-domain.com:3478`
    - **TURN secret**: (found in `.env` file)
 
-## 🚨 Troubleshooting
-
-### Quick Diagnostic
+## 🔧 Troubleshooting
 
 Run the built-in troubleshooting scripts:
+
 ```bash
 # General system check
 ./troubleshoot.sh
 
-# Specific dashboard routing test
+# Specific dashboard routing test  
 ./test-dashboard.sh
 
 # Fix Nextcloud integrity check issues (.user.ini)
@@ -218,6 +220,8 @@ Run the built-in troubleshooting scripts:
 # Alternative PHP configuration methods
 ./alternative-php-config.sh
 ```
+
+### Common Issues
 
 The troubleshooting script checks:
 - Container status and health
@@ -239,39 +243,35 @@ The integrity fix scripts resolve:
 - File checksum mismatches
 - Alternative configuration methods
 
-### Check Container Status
-```bash
-docker-compose ps
-```
+### Manual Commands
 
-### View Logs
 ```bash
-# All services
+# Check container status
+docker-compose ps
+
+# View logs - all services
 docker-compose logs -f
 
-# Specific service
+# View logs - specific service
 docker-compose logs -f nextcloud-app
 docker-compose logs -f traefik
-```
 
-### Restart Services
-```bash
-# Restart all
+# Restart services
 docker-compose restart
 
 # Restart specific service
 docker-compose restart nextcloud-app
 ```
 
-### Common Issues
+### Specific Issues
 
-1. **Port 80/443 already in use**:
+1. **Port 80/443 already in use:**
    ```bash
    sudo netstat -tlnp | grep :80
    sudo netstat -tlnp | grep :443
    ```
 
-2. **Traefik dashboard shows Nextcloud error instead of dashboard**:
+2. **Traefik dashboard shows Nextcloud error instead of dashboard:**
    ```bash
    # Test dashboard routing
    ./test-dashboard.sh
@@ -290,7 +290,7 @@ docker-compose restart nextcloud-app
    docker exec nextcloud-traefik cat /config/dynamic.yml | grep -A 5 traefik-stripprefix
    ```
 
-3. **Traefik container stuck in "starting" status**:
+3. **Traefik container stuck in "starting" status:**
    ```bash
    # Check Traefik health status
    docker inspect nextcloud-traefik --format='{{.State.Health.Status}}'
@@ -305,17 +305,17 @@ docker-compose restart nextcloud-app
    docker restart nextcloud-traefik
    ```
 
-3. **SSL certificate issues**:
+4. **SSL certificate issues:**
    - Check DNS is pointing to your server
    - Verify ports 80/443 are accessible from internet
    - Check Let's Encrypt rate limits
    - Verify acme.json permissions: `ls -la traefik/acme.json` (should be 600)
 
-4. **Database connection issues**:
+5. **Database connection issues:**
    - Wait for full initialization (can take 5-10 minutes)
    - Check MySQL logs: `docker-compose logs -f nextcloud-db`
 
-6. **Traefik dashboard not accessible**:
+6. **Traefik dashboard not accessible:**
    ```bash
    # Verify Traefik is routing correctly
    curl -H "Host: your-domain.com" http://localhost/traefik/dashboard/
@@ -327,40 +327,42 @@ docker-compose restart nextcloud-app
    docker exec nextcloud-traefik ls -la /config/
    ```
 
-   **Note**: This issue occurs when PHP configuration files are modified after Nextcloud calculates its integrity hashes. The `.user.ini` file is safe to modify for performance tuning, but Nextcloud flags it as a security concern. Excluding it from integrity checks is the recommended solution.
+### Integrity Check Issues (SOLVED) ✅
 
-### Traefik Troubleshooting
+**Note**: This issue occurs when PHP configuration files are modified after Nextcloud calculates its integrity hashes. The `.user.ini` file is safe to modify for performance tuning, but Nextcloud flags it as a security concern. 
+
+**Our solution uses official pre-installation hooks which apply configuration BEFORE Nextcloud initialization, preventing any integrity issues.**
 
 If Traefik remains stuck in "starting" status:
 
-1. **Check the health check manually**:
+1. **Check the health check manually:**
    ```bash
    docker exec nextcloud-traefik wget --spider http://localhost:8080/ping
    ```
 
-2. **Disable health checks temporarily** (for debugging):
+2. **Disable health checks temporarily (for debugging):**
    ```bash
    # Edit docker-compose.yml and comment out the healthcheck section
-   # Then restart: docker-compose up -d traefik
+   # Then restart:
+   docker-compose up -d traefik
    ```
 
-3. **Check for configuration issues**:
+3. **Check for configuration issues:**
    ```bash
    # Validate Traefik configuration
    docker exec nextcloud-traefik traefik version
    docker logs nextcloud-traefik | grep -i error
    ```
 
-4. **Reset Traefik completely**:
+4. **Reset Traefik completely:**
    ```bash
    docker-compose stop traefik
    docker-compose rm -f traefik
    docker-compose up -d traefik
    ```
 
-## 🔧 Maintenance
+## 🔄 Backup and Restore
 
-### Backup
 ```bash
 # Stop services
 docker-compose down
@@ -373,12 +375,13 @@ tar -czf nextcloud-backup-$(date +%Y%m%d).tar.gz \
 docker-compose up -d
 ```
 
-### Update Configuration
-1. Edit `.env` file
-2. Restart services: `docker-compose up -d`
+## 🛠️ Maintenance
 
-### Clean Up
+- Edit `.env` file
+- Restart services: `docker-compose up -d`
+
 ```bash
+# Clean up Docker
 # Remove unused images
 docker image prune -a
 
@@ -386,14 +389,13 @@ docker image prune -a
 docker volume prune
 ```
 
-## 📝 Support
+## 📞 Support
 
 For issues and questions:
-
-1. Check the logs: `docker-compose logs -f`
-2. Verify all services are healthy: `docker-compose ps`
-3. Review Nextcloud admin panel for warnings
-4. Check Traefik dashboard for routing issues
+- Check the logs: `docker-compose logs -f`
+- Verify all services are healthy: `docker-compose ps`
+- Review Nextcloud admin panel for warnings
+- Check Traefik dashboard for routing issues
 
 ## 📄 License
 

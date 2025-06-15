@@ -153,42 +153,6 @@ create_docker_network() {
     fi
 }
 
-# Function to create Nextcloud initialization script
-create_nextcloud_init_script() {
-    print_info "Creating Nextcloud initialization script..."
-    
-    cat > scripts/nextcloud-init.sh << 'EOF'
-#!/bin/bash
-set -e
-
-echo "Installing bz2 extension and curl for Nextcloud..."
-
-# Update package list
-apt-get update
-
-# Install bzip2 library, curl, and PHP extension
-apt-get install -y libbz2-dev curl
-
-# Install and enable PHP bz2 extension
-docker-php-ext-install bz2
-docker-php-ext-enable bz2
-
-# Clean up to reduce image size
-apt-get autoremove -y
-apt-get autoclean
-rm -rf /var/lib/apt/lists/*
-
-echo "bz2 extension and curl installed successfully!"
-
-# Verify installation
-php -m | grep -i bz2 && echo "✓ bz2 extension is loaded" || echo "✗ Warning: bz2 extension not found"
-curl --version >/dev/null 2>&1 && echo "✓ curl is available" || echo "✗ Warning: curl not found"
-EOF
-    
-    chmod +x scripts/nextcloud-init.sh
-    print_success "Nextcloud initialization script created."
-}
-
 # Function to create watchtower post-update hooks
 create_watchtower_hooks() {
     print_info "Creating watchtower post-update hooks..."
@@ -483,65 +447,6 @@ EOF
     create_traefik_yml "$LETSENCRYPT_EMAIL"
 }
 
-# Function to install bz2 extension in running container
-install_bz2_extension() {
-    print_info "Installing bz2 extension in Nextcloud container..."
-    
-    local container_name="nextcloud-app"
-    local max_attempts=60
-    local attempt=1
-    
-    # First, check if container is running
-    if ! docker ps --format "table {{.Names}}" | grep -q "^${container_name}$"; then
-        print_error "Container $container_name is not running"
-        return 1
-    fi
-    
-    # Wait for container to be ready
-    print_info "Waiting for Nextcloud container to be fully ready..."
-    while [ $attempt -le $max_attempts ]; do
-        # Check if Nextcloud is responding and not in maintenance mode
-        if docker exec $container_name curl -f -s http://localhost:80/status.php 2>/dev/null | grep -q '"installed":true'; then
-            print_success "Nextcloud container is ready for bz2 installation"
-            break
-        fi
-        print_info "Waiting for Nextcloud container to be ready... (attempt $attempt/$max_attempts)"
-        sleep 10
-        ((attempt++))
-    done
-    
-    if [ $attempt -gt $max_attempts ]; then
-        print_error "Nextcloud container failed to become ready for bz2 installation"
-        print_info "Checking container status..."
-        docker ps --filter "name=$container_name"
-        docker logs --tail 20 $container_name
-        return 1
-    fi
-    
-    # Install bz2 extension
-    print_info "Installing bz2 extension and curl..."
-    if docker exec $container_name bash -c "
-        set -e
-        echo 'Installing bz2 extension and curl...'
-        apt-get update >/dev/null 2>&1
-        apt-get install -y libbz2-dev curl >/dev/null 2>&1
-        docker-php-ext-install bz2 >/dev/null 2>&1
-        docker-php-ext-enable bz2 >/dev/null 2>&1
-        apt-get autoremove -y >/dev/null 2>&1
-        apt-get autoclean >/dev/null 2>&1
-        rm -rf /var/lib/apt/lists/* >/dev/null 2>&1
-        echo 'bz2 extension and curl installed successfully!'
-        php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
-        curl --version >/dev/null 2>&1 && echo '✓ curl is available' || echo '✗ Warning: curl not found'
-    "; then
-        print_success "bz2 extension installation completed successfully"
-        return 0
-    else
-        print_error "Failed to install bz2 extension"
-        return 1
-    fi
-}
-
 # Function to validate domain name
 validate_domain() {
     local domain="$1"
@@ -641,260 +546,13 @@ main() {
     echo
     
     # Create utility scripts
-    create_nextcloud_init_script
     create_watchtower_hooks
     
-    # Create troubleshooting script
-    cat > troubleshoot.sh << 'TROUBLESHOOT_EOF'
-#!/bin/bash
-
-# Nextcloud Docker Troubleshooting Script
-# This script helps diagnose common issues with the Nextcloud installation
-
-set -e
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-print_header() { echo -e "${BLUE}=== $1 ===${NC}"; }
-
-# Check container status
-check_container_status() {
-    print_header "Container Status Check"
-    echo -e "\n${BLUE}Running Containers:${NC}"
-    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-}
-
-# Check health status
-check_health_status() {
-    print_header "Health Check Status"
-    for container in nextcloud-app nextcloud-db nextcloud-redis nextcloud-traefik; do
-        if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
-            health_status=$(docker inspect $container --format='{{.State.Health.Status}}' 2>/dev/null || echo "no-healthcheck")
-            if [ "$health_status" = "healthy" ]; then
-                print_success "✓ $container: $health_status"
-            elif [ "$health_status" = "starting" ]; then
-                print_warning "⏳ $container: $health_status"
-            elif [ "$health_status" = "unhealthy" ]; then
-                print_error "✗ $container: $health_status"
-            else
-                print_info "ℹ️  $container: no health check configured"
-            fi
-        else
-            print_error "✗ $container: not running"
-        fi
-    done
-}
-
-# Check Traefik specific issues
-check_traefik() {
-    print_header "Traefik Diagnostic"
-    if ! docker ps --format "{{.Names}}" | grep -q "^nextcloud-traefik$"; then
-        print_error "✗ Traefik container is not running"
-        return 1
-    fi
-    
-    if docker exec nextcloud-traefik wget -qO- http://localhost:8080/ping 2>/dev/null | grep -q "OK"; then
-        print_success "✓ Traefik ping endpoint accessible"
-    else
-        print_error "✗ Traefik ping endpoint not accessible"
-    fi
-    
-    echo -e "\n${BLUE}Recent Traefik logs:${NC}"
-    docker logs nextcloud-traefik --tail 5
-}
-
-# Main execution
-main() {
-    echo "========================================"
-    echo "  Nextcloud Docker Troubleshooting"
-    echo "========================================"
-    echo
-    check_container_status
-    echo
-    check_health_status
-    echo
-    check_traefik
-    echo
-    print_info "For detailed diagnostics, check individual container logs:"
-    print_info "  docker-compose logs -f [service-name]"
-}
-
-main "$@"
-TROUBLESHOOT_EOF
+    # Make troubleshoot and test-dashboard scripts executable
     
     chmod +x troubleshoot.sh
     
-    # Create dashboard testing script
-    cat > test-dashboard.sh << 'TESTDASH_EOF'
-#!/bin/bash
-
-# Traefik Dashboard Testing Script
-# This script tests if the Traefik dashboard routing is working correctly
-
-set -e
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-
-# Check if .env file exists and load it
-if [ ! -f ".env" ]; then
-    print_error ".env file not found"
-    exit 1
-fi
-source .env
-
-echo "=== Traefik Dashboard Routing Test ==="
-echo "Domain: $DOMAIN_NAME"
-echo
-
-# Test dashboard routing
-print_info "Testing dashboard routing..."
-dashboard_response=$(curl -s -w "%{http_code}" -H "Host: $DOMAIN_NAME" "http://localhost/traefik/dashboard/" -o /dev/null 2>/dev/null || echo "000")
-
-case $dashboard_response in
-    "401")
-        print_success "✓ Dashboard routing working (401 = auth required)"
-        echo "Access at: https://$DOMAIN_NAME/traefik/dashboard/"
-        ;;
-    "404")
-        print_error "✗ Dashboard shows 404 - request going to Nextcloud instead"
-        echo "Fix: docker restart nextcloud-traefik"
-        ;;
-    *)
-        print_warning "⚠️  Dashboard returned HTTP $dashboard_response"
-        ;;
-esac
-
-# Test with authentication if password available
-if [ -n "$TRAEFIK_DASHBOARD_PASSWORD" ]; then
-    print_info "Testing with authentication..."
-    auth_response=$(curl -s -w "%{http_code}" -u "admin:$TRAEFIK_DASHBOARD_PASSWORD" -H "Host: $DOMAIN_NAME" "http://localhost/traefik/dashboard/" -o /dev/null 2>/dev/null || echo "000")
-    if [ "$auth_response" = "200" ]; then
-        print_success "✓ Dashboard accessible with authentication"
-    else
-        print_warning "⚠️  Auth test returned HTTP $auth_response"
-    fi
-fi
-
-echo
-print_info "For detailed troubleshooting, run: ./troubleshoot.sh"
-TESTDASH_EOF
-    
     chmod +x test-dashboard.sh
-    
-    # Create integrity fix script
-    cat > fix-integrity.sh << 'INTEGRITY_EOF'
-#!/bin/bash
-
-# Nextcloud Integrity Fix Script - Focus on hash regeneration
-set -e
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-
-if ! docker ps --format "{{.Names}}" | grep -q "^nextcloud-app$"; then
-    print_error "Nextcloud container is not running"
-    exit 1
-fi
-
-echo "=== Nextcloud Integrity Hash Regeneration ==="
-
-# Step 1: Update .user.ini
-print_info "Updating .user.ini with performance settings..."
-cat > ./app/.user.ini << 'USERINI_EOF'
-; Nextcloud PHP Configuration - Performance optimized
-
-; File upload settings
-php_value upload_max_filesize=16G
-php_value post_max_size=16G
-php_value max_execution_time=3600
-php_value max_input_time=3600
-php_value memory_limit=2048M
-
-; OPCache settings
-opcache.enable_cli=1
-apc.enable_cli=1
-opcache.save_comments=1
-opcache.revalidate_freq=60
-opcache.validate_timestamps=0
-opcache.interned_strings_buffer=8
-opcache.max_accelerated_files=10000
-opcache.memory_consumption=128
-opcache.jit=1255
-opcache.jit_buffer_size=128
-
-; Security settings
-php_value session.cookie_httponly=1
-php_value session.cookie_secure=1
-php_value session.cookie_samesite=Strict
-USERINI_EOF
-
-# Step 2: Regenerate integrity hashes
-print_info "Regenerating Nextcloud integrity hashes..."
-docker exec -u 33 nextcloud-app bash -c "
-    echo 'Enabling maintenance mode...'
-    ./occ maintenance:mode --on
-    echo 'Clearing integrity cache...'
-    rm -f /var/www/html/data/.integrity.check.disabled 2>/dev/null || true
-    rm -rf /var/www/html/data/integrity.results.json 2>/dev/null || true
-    echo 'Updating htaccess...'
-    ./occ maintenance:update-htaccess
-    echo 'Regenerating hashes (this may take a minute)...'
-    ./occ maintenance:repair --include-expensive
-    echo 'Disabling maintenance mode...'
-    ./occ maintenance:mode --off
-"
-
-sleep 10
-
-# Step 3: Check results
-print_info "Checking integrity status..."
-if docker exec -u 33 nextcloud-app ./occ integrity:check-core --output=json 2>/dev/null | grep -q "INVALID_HASH"; then
-    print_warning "Hash regeneration didn't completely resolve the issue"
-    print_info "Applying fallback: excluding .user.ini from integrity checks"
-    docker exec -u 33 nextcloud-app ./occ config:system:set integrity.excluded.files --value='[".user.ini"]' --type=json
-    print_success "✓ .user.ini excluded from future integrity checks"
-else
-    print_success "✓ SUCCESS! Integrity hashes regenerated successfully"
-fi
-
-# Step 4: Verify settings
-echo ""
-print_info "Verifying PHP settings are active:"
-docker exec nextcloud-app php -r "echo 'Upload limit: ' . ini_get('upload_max_filesize') . PHP_EOL;"
-docker exec nextcloud-app php -r "echo 'Memory limit: ' . ini_get('memory_limit') . PHP_EOL;"
-docker exec nextcloud-app php -r "echo 'Execution time: ' . ini_get('max_execution_time') . 's' . PHP_EOL;"
-
-print_success "Fix completed! Check your Nextcloud admin panel."
-INTEGRITY_EOF
-    
-    chmod +x fix-integrity.sh
     
     echo
     
@@ -945,15 +603,6 @@ print_info "Restarting containers after initialization..."
 docker compose up -d
 sleep 30
 
-# Install bz2 extension while containers are running
-print_info "Installing bz2 extension..."
-if install_bz2_extension; then
-    print_success "bz2 extension installed successfully"
-else
-    print_error "Failed to install bz2 extension"
-    exit 1
-fi
-
 # Run Nextcloud configuration commands
 print_info "Waiting for Nextcloud to be ready for final configuration..."
 sleep 60
@@ -979,37 +628,6 @@ docker exec -it -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
 docker exec -it -u 33 nextcloud-app ./occ app:enable spreed
 docker exec -it -u 33 nextcloud-app ./occ app:enable calendar
 
-# Update PHP settings in .user.ini AFTER initial setup
-print_info "Updating PHP configuration (.user.ini)..."
-cat > ./app/.user.ini << 'EOF'
-; Nextcloud PHP Configuration
-; Updated during installation for better performance
-
-; File upload settings
-php_value upload_max_filesize=16G
-php_value post_max_size=16G
-php_value max_execution_time=3600
-php_value max_input_time=3600
-php_value memory_limit=2048M
-
-; OPCache settings for better performance
-opcache.enable_cli=1
-apc.enable_cli=1
-opcache.save_comments=1
-opcache.revalidate_freq=60
-opcache.validate_timestamps=0
-opcache.interned_strings_buffer=8
-opcache.max_accelerated_files=10000
-opcache.memory_consumption=128
-opcache.jit=1255
-opcache.jit_buffer_size=128
-
-; Security settings
-php_value session.cookie_httponly=1
-php_value session.cookie_secure=1
-php_value session.cookie_samesite=Strict
-EOF
-
 # Update Nextcloud integrity hashes to include our .user.ini changes
 print_info "Updating Nextcloud integrity checksums..."
 if docker exec -u 33 nextcloud-app ./occ integrity:check-core --output=json 2>/dev/null | grep -q "INVALID_HASH"; then
@@ -1024,7 +642,7 @@ if docker exec -u 33 nextcloud-app ./occ integrity:check-core --output=json 2>/d
     sleep 2
     docker exec -u 33 nextcloud-app ./occ config:system:delete integrity.check.disabled
     
-    print_success "Integrity hashes updated - .user.ini modifications should now be accepted"
+    print_success "Integrity hashes updated - .user.ini modifications from pre-install-hook should now be accepted"
 else
     print_success "No integrity issues detected"
 fi
@@ -1109,7 +727,6 @@ print_warning "Important Notes:"
 print_warning "  • Make sure your DNS points to this server"
 print_warning "  • If Traefik shows 'starting', wait 5-10 minutes for health checks"
 print_warning "  • If dashboard shows Nextcloud error, run: ./test-dashboard.sh"
-print_warning "  • If you see .user.ini integrity warnings, run: ./fix-integrity.sh"
 print_warning "  • Configure email settings in Talk app if needed"
 print_warning "  • Keep your .env file secure - it contains all passwords"
 print_warning "  • Check 'docker compose logs -f' for any issues"
