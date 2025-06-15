@@ -51,7 +51,7 @@ fi
 
 # Test 3: Test dashboard routing without authentication
 print_info "Test 3: Testing dashboard routing (expecting 401 Unauthorized)..."
-dashboard_response=$(curl -s -w "%{http_code}" -H "Host: $DOMAIN_NAME" "http://localhost/traefik/dashboard/" -o /dev/null 2>/dev/null || echo "000")
+dashboard_response=$(curl -s -w "%{http_code}" -H "Host: $DOMAIN_NAME" "http://localhost/dashboard/" -o /dev/null 2>/dev/null || echo "000")
 
 case $dashboard_response in
     "401")
@@ -121,7 +121,7 @@ fi
 # Test 7: Test with authentication (if credentials provided)
 print_info "Test 7: Testing with authentication..."
 if [ -n "$TRAEFIK_DASHBOARD_PASSWORD" ]; then
-    auth_response=$(curl -s -w "%{http_code}" -u "admin:$TRAEFIK_DASHBOARD_PASSWORD" -H "Host: $DOMAIN_NAME" "http://localhost/traefik/dashboard/" -o /dev/null 2>/dev/null || echo "000")
+    auth_response=$(curl -s -w "%{http_code}" -u "admin:$TRAEFIK_DASHBOARD_PASSWORD" -H "Host: $DOMAIN_NAME" "http://localhost/dashboard/" -o /dev/null 2>/dev/null || echo "000")
     
     case $auth_response in
         "200")
@@ -157,13 +157,13 @@ if [ "$dashboard_response" = "404" ] || [ "$api_response" = "404" ]; then
     echo "1. Restart Traefik: docker restart nextcloud-traefik"
     echo "2. Check router configuration: docker-compose logs traefik | grep router"
     echo "3. Verify priorities: Higher numbers = higher priority in Traefik"
-    echo "4. Test manually: curl -H 'Host: $DOMAIN_NAME' http://localhost/traefik/dashboard/"
+    echo "4. Test manually: curl -H 'Host: $DOMAIN_NAME' http://localhost/dashboard/"
     
 elif [ "$dashboard_response" = "401" ] && [ "$api_response" = "401" ]; then
     print_success "✅ Dashboard routing is working correctly!"
     echo
     echo "Access your dashboard at:"
-    echo "  https://$DOMAIN_NAME/traefik/dashboard/"
+    echo "  https://$DOMAIN_NAME/dashboard/"
     echo "  Username: admin"
     echo "  Password: (from your .env file)"
     

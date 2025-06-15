@@ -376,7 +376,7 @@ generate_env_file() {
     done
     
     # Traefik dashboard password
-    print_info "Traefik dashboard password (for accessing /traefik/dashboard/)"
+    print_info "Traefik dashboard password (for accessing /dashboard/)"
     TRAEFIK_DASHBOARD_PASSWORD=$(read_password "Traefik dashboard password")
     
     # MySQL root password
@@ -689,7 +689,7 @@ echo
 
 print_info "Access URLs:"
 print_info "  📱 Nextcloud: https://$DOMAIN_NAME"
-print_info "  🔧 Traefik Dashboard: https://$DOMAIN_NAME/traefik/dashboard/"
+print_info "  🔧 Traefik Dashboard: https://$DOMAIN_NAME/dashboard/"
 print_info "  📞 Nextcloud Talk: https://signal.$DOMAIN_NAME"
 echo
 print_info "Credentials:"

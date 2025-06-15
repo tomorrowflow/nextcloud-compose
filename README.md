@@ -19,7 +19,7 @@ A comprehensive, hands-free Nextcloud installation using Docker Compose with Tra
 - **Docker**: Version 20.10 or higher
 - **Docker Compose**: Version 2.0 or higher
 - **Domain Name**: Pointing to your server's IP address
-- **Ports**: 80, 443, 3478, 8080, 8081 available (80, 443, 3478 world accessable)
+- **Ports**: 80, 443, 3478, 8080, 8081 available (only 80/tcp, 443/tcp, 3478 tcp/udp world accessable)
 
 ## 🚀 Quick Start
 
@@ -58,7 +58,7 @@ After installation, you can access:
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | Nextcloud | https://your-domain.com | Check .env file |
-| Traefik Dashboard | https://your-domain.com/traefik/dashboard/ | admin / (from .env) |
+| Traefik Dashboard | https://your-domain.com/dashboard/ | admin / (from .env) |
 | Nextcloud Talk | https://signal.your-domain.com | Same as Nextcloud |
 
 ## 📁 Directory Structure
@@ -107,7 +107,7 @@ NEXTCLOUD_ADMIN_PASSWORD=secure-password
 
 ## 🏎️ Performance Optimization
 
-### Official Pre-installation Hooks Method ✅
+### ✅ Pre-installation Hooks Method
 
 PHP settings are configured via **Nextcloud pre-installation hooks** to ensure optimal performance without integrity check conflicts:
 
@@ -210,9 +210,6 @@ Run the built-in troubleshooting scripts:
 
 # Fix Nextcloud integrity check issues (.user.ini)
 ./fix-userini-integrity.sh
-
-# Alternative PHP configuration methods
-./alternative-php-config.sh
 ```
 
 ### Common Issues
@@ -231,7 +228,7 @@ The dashboard test script specifically checks:
 - Route priorities
 - API endpoint access
 
-The integrity fix scripts resolve:
+The integrity fix scripts intends to resolve (it seems a long discusses known issue, so this is no **SOLUTION**):
 - `.user.ini` integrity check failures
 - PHP configuration conflicts
 - File checksum mismatches
@@ -277,8 +274,8 @@ docker-compose restart nextcloud-app
    docker restart nextcloud-traefik
    
    # Test routing manually
-   curl -H "Host: your-domain.com" http://localhost/traefik/dashboard/
-   # Should return 401 (auth required), not 404
+   curl -H "Host: your-domain.com" http://localhost/dashboard/
+   # Should return 401 (auth required)
    
    # Check middleware configuration
    docker exec nextcloud-traefik cat /config/dynamic.yml | grep -A 5 traefik-stripprefix
@@ -292,7 +289,7 @@ docker-compose restart nextcloud-app
    # Check Traefik logs
    docker logs nextcloud-traefik
    
-   # Check if ping endpoint is accessible
+   # Check if ping endpoint is accessible from local server
    docker exec nextcloud-traefik wget -qO- http://localhost:8080/ping
    
    # Restart Traefik if needed
@@ -312,7 +309,7 @@ docker-compose restart nextcloud-app
 6. **Traefik dashboard not accessible:**
    ```bash
    # Verify Traefik is routing correctly
-   curl -H "Host: your-domain.com" http://localhost/traefik/dashboard/
+   curl -H "Host: your-domain.com" http://localhost/dashboard/
    
    # Check dynamic configuration
    docker exec nextcloud-traefik cat /config/dynamic.yml
@@ -321,11 +318,11 @@ docker-compose restart nextcloud-app
    docker exec nextcloud-traefik ls -la /config/
    ```
 
-### Integrity Check Issues (SOLVED) ✅
+### Integrity Check Issues
 
 **Note**: This issue occurs when PHP configuration files are modified after Nextcloud calculates its integrity hashes. The `.user.ini` file is safe to modify for performance tuning, but Nextcloud flags it as a security concern. 
 
-**Our solution uses official pre-installation hooks which apply configuration BEFORE Nextcloud initialization, preventing any integrity issues.**
+**Our solution uses pre-installation hooks which apply configuration BEFORE Nextcloud initialization, this should prevent any integrity issues, but it does not!.**
 
 If Traefik remains stuck in "starting" status:
 
@@ -397,4 +394,4 @@ This project is provided as-is for educational and production use. Please ensure
 
 ---
 
-**Happy Cloud Computing! ☁️**
+**Happy Nexcloud Using! ☁️**

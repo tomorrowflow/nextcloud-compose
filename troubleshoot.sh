@@ -109,7 +109,7 @@ check_traefik() {
     if [ -f ".env" ]; then
         source .env
         # Test internal dashboard access
-        dashboard_response=$(curl -s -w "%{http_code}" -H "Host: $DOMAIN_NAME" "http://localhost/traefik/dashboard/" -o /dev/null 2>/dev/null || echo "000")
+        dashboard_response=$(curl -s -w "%{http_code}" -H "Host: $DOMAIN_NAME" "http://localhost/dashboard/" -o /dev/null 2>/dev/null || echo "000")
         if [ "$dashboard_response" = "401" ]; then
             print_success "✓ Dashboard routing working (401 = authentication required)"
         elif [ "$dashboard_response" = "200" ]; then
@@ -279,7 +279,7 @@ suggest_fixes() {
     echo "  # Restart Traefik to reload routes"
     echo "  docker restart nextcloud-traefik"
     echo "  # Test routing manually"
-    echo "  curl -H 'Host: your-domain.com' http://localhost/traefik/dashboard/"
+    echo "  curl -H 'Host: your-domain.com' http://localhost/dashboard/"
     echo "  # Check middleware configuration"
     echo "  docker exec nextcloud-traefik cat /config/dynamic.yml"
     echo
