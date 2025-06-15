@@ -20,7 +20,7 @@ http:
     user-auth:
       basicAuth:
         users:
-          - "admin:$apr1$945jfuda$AK1d46U3FD4dzFQdd4jeD/"
+          - "admin:hashed_strong_password"
     
     # Strip /traefik prefix for dashboard access
     traefik-stripprefix:

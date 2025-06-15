@@ -12,14 +12,14 @@ A comprehensive, hands-free Nextcloud installation using Docker Compose with Tra
 - **High Performance**: Redis caching, OPcache, and optimized PHP settings via **official pre-installation hooks**
 - **Video Calls**: Nextcloud Talk with high-performance backend
 - **Security**: Strong passwords, secure headers, and proper permissions
-- **✅ Integrity Check Compliance**: PHP configuration via official Nextcloud pre-installation hooks (no integrity conflicts)
+- **Integrity Check Compliance**: PHP configuration via Nextcloud pre-installation hooks
 
 ## 🛠️ Requirements
 
 - **Docker**: Version 20.10 or higher
 - **Docker Compose**: Version 2.0 or higher
 - **Domain Name**: Pointing to your server's IP address
-- **Ports**: 80, 443, 3478, 8080, 8081 available
+- **Ports**: 80, 443, 3478, 8080, 8081 available (80, 443, 3478 world accessable)
 
 ## 🚀 Quick Start
 
@@ -109,12 +109,11 @@ NEXTCLOUD_ADMIN_PASSWORD=secure-password
 
 ### Official Pre-installation Hooks Method ✅
 
-PHP settings are configured via **official Nextcloud pre-installation hooks** to ensure optimal performance without integrity check conflicts:
+PHP settings are configured via **Nextcloud pre-installation hooks** to ensure optimal performance without integrity check conflicts:
 
 ```bash
 # Pre-installation hooks are located in:
 ./hooks/pre-installation/01-configure-php.sh    # PHP performance settings
-./hooks/pre-installation/02-install-bz2.sh      # bz2 extension installation
 ```
 
 **Key optimizations applied:**
@@ -123,14 +122,6 @@ PHP settings are configured via **official Nextcloud pre-installation hooks** to
 - Execution time: 3600 seconds for large operations
 - OPcache tuning: JIT enabled, 128MB cache, 10000 files
 - Session security: HTTPOnly, Secure, SameSite cookies
-
-### Why Pre-installation Hooks?
-
-This approach:
-- ✅ **No integrity check conflicts** - Applied before Nextcloud initialization
-- ✅ **Official Nextcloud method** - Uses documented pre-installation hooks
-- ✅ **Watchtower compatible** - Persists through container updates
-- ✅ **Clean architecture** - Follows Docker and Nextcloud best practices
 
 ## 🛠️ Customizing PHP Settings
 
@@ -143,7 +134,7 @@ If you need to modify PHP settings, you can:
    docker-compose down && docker-compose up -d
    ```
 
-2. **Volume-mount custom PHP configuration:**
+2. **Volume-mount custom PHP configuration: (not tested!)**
    ```yaml
    volumes:
      - ./custom-php.ini:/usr/local/etc/php/conf.d/99-custom.ini:ro

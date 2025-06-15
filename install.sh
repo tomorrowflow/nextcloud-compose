@@ -192,15 +192,7 @@ EOF
 # Function to generate Traefik dashboard password hash
 generate_traefik_password_hash() {
     local password="$1"
-    local username="admin"
-    
-    # Use htpasswd to generate the hash (Apache APR1 format)
-    if command -v htpasswd &> /dev/null; then
-        htpasswd -nbB "$username" "$password" | cut -d: -f2
-    else
-        # Fallback: use openssl to generate APR1 hash
-        echo "$password" | openssl passwd -apr1 -stdin
-    fi
+    echo "$password" | openssl passwd -apr1 -stdin
 }
 
 # Function to update dynamic.yml with generated password hash
