@@ -592,6 +592,23 @@ else
     docker logs --tail 10 nextcloud-traefik
 fi
 
+print_info "Adding bz2 module..."
+# Install bz2 extension
+docker exec nextcloud-app bash -c "
+    set -e
+    echo 'Installing bz2 extension and curl...'
+    apt-get update
+    apt-get install -y libbz2-dev curl
+    docker-php-ext-install bz2
+    docker-php-ext-enable bz2
+    apt-get autoremove -y
+    apt-get autoclean
+    rm -rf /var/lib/apt/lists/*
+    echo 'bz2 extension and curl installed successfully!'
+    php -m | grep -i bz2 && echo '✓ bz2 extension is loaded' || echo '✗ Warning: bz2 extension not found'
+    curl --version >/dev/null 2>&1 && echo '✓ curl is available' || echo '✗ Warning: curl not found'
+    "
+
 print_info "Running Nextcloud configuration commands..."
 docker exec -it -u 33 nextcloud-app ./occ upgrade
 docker exec -it -u 33 nextcloud-app ./occ config:system:set maintenance_window_start --value="1" --type=integer
