@@ -133,18 +133,22 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
-      # Traefik dashboard routing - higher priority to catch first
-      - traefik.http.routers.traefik-secure.entrypoints=websecure
-      - traefik.http.routers.traefik-secure.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/traefik/dashboard`) || PathPrefix(`/traefik/api`))
-      - traefik.http.routers.traefik-secure.service=api@internal
-      - traefik.http.routers.traefik-secure.middlewares=traefik-stripprefix@file,user-auth@file
-      - traefik.http.routers.traefik-secure.priority=100
-      - traefik.http.routers.traefik-secure.tls.certresolver=letsencrypt
-      # HTTP to HTTPS redirect for dashboard
+      # Simple dashboard routing for insecure API mode
+      - traefik.http.routers.traefik-dashboard.entrypoints=websecure
+      - traefik.http.routers.traefik-dashboard.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/dashboard`)
+      - traefik.http.routers.traefik-dashboard.service=api@internal
+      - traefik.http.routers.traefik-dashboard.middlewares=user-auth@file
+      - traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt
+      # API routing
+      - traefik.http.routers.traefik-api.entrypoints=websecure
+      - traefik.http.routers.traefik-api.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api`)
+      - traefik.http.routers.traefik-api.service=api@internal
+      - traefik.http.routers.traefik-api.middlewares=user-auth@file
+      - traefik.http.routers.traefik-api.tls.certresolver=letsencrypt
+      # HTTP to HTTPS redirect
       - traefik.http.routers.traefik-insecure.entrypoints=web
-      - traefik.http.routers.traefik-insecure.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/traefik/dashboard`) || PathPrefix(`/traefik/api`))
+      - traefik.http.routers.traefik-insecure.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
       - traefik.http.routers.traefik-insecure.middlewares=redirect-to-https@file
-      - traefik.http.routers.traefik-insecure.priority=100
       # Autoheal and Watchtower labels
       - autoheal=true
       - com.centurylinklabs.watchtower.enable=true

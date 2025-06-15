@@ -1,1 +1,5 @@
 .DS_Store
+debug-traefik-dashboard.sh
+validate-dashboard-fix.sh
+validate-diagnosis.sh
+final-dashboard-test.sh

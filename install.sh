@@ -276,8 +276,11 @@ create_traefik_yml() {
     cat > traefik/traefik.yml << EOF
 api:
   dashboard: true
-  insecure: false
-  debug: false
+  insecure: true
+  debug: true  # Change from false to true
+
+log:
+  level: DEBUG  # Change from INFO to DEBUG
 
 ping: {}
 
@@ -298,6 +301,9 @@ entryPoints:
       tls:
         certResolver: letsencrypt
 
+  traefik:
+    address: ":8080"
+
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
@@ -310,12 +316,9 @@ providers:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: '${letsencrypt_email}'
+      email: 'your-email@example.com'  # Replace with your actual email
       storage: 'acme.json'
       tlsChallenge: {}
-
-log:
-  level: INFO
 
 accessLog: {}
 EOF

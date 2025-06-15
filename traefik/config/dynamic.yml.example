@@ -21,13 +21,20 @@ http:
       basicAuth:
         users:
           - "admin:hashed_strong_password"
-    
+
     # Strip /traefik prefix for dashboard access
     traefik-stripprefix:
       stripPrefix:
         prefixes:
           - "/traefik"
     
+    # Redirect HTTP to HTTPS
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+    
+    # Nextcloud specific headers
     nextcloud-headers:
       headers:
         customRequestHeaders:
