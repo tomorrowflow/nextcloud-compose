@@ -7,11 +7,8 @@ set -e
 
 echo "🔧 Configuring PHP settings via pre-installation hook..."
 
-# Create PHP configuration directory
-mkdir -p /usr/local/etc/php/conf.d
-
 # Create optimized PHP configuration
-cat > /usr/local/etc/php/conf.d/99-nextcloud-performance.ini << 'PHPEOF'
+cat > /var/www/html/.user.ini << 'PHPEOF'
 ; Nextcloud Performance Configuration
 ; Applied via official pre-installation hooks
 
@@ -55,11 +52,5 @@ max_file_uploads = 100
 ; Timezone
 date.timezone = UTC
 PHPEOF
-
-echo "✅ PHP configuration created successfully"
-
-# Set proper permissions
-chown root:root /usr/local/etc/php/conf.d/99-nextcloud-performance.ini
-chmod 644 /usr/local/etc/php/conf.d/99-nextcloud-performance.ini
 
 echo "✅ Pre-installation PHP configuration completed"
