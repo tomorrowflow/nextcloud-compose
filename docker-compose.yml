@@ -163,6 +163,7 @@ services:
       - 3478:3478/tcp
       - 3478:3478/udp
       - 8081:8081/tcp
+      - 3002:3002/tcp
     environment:
       - TZ=Europe/Berlin
       - TALK_PORT=3478
@@ -264,6 +265,44 @@ services:
     labels:
       - autoheal=false
       - com.centurylinklabs.watchtower.enable=false
+
+  nextcloud-whiteboard:
+    image: ghcr.io/nextcloud-releases/whiteboard:release
+    container_name: nextcloud-whiteboard
+    restart: unless-stopped
+    depends_on:
+      nextcloud-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    environment:
+      - JWT_SECRET=${WHITEBOARD_JWT_SECRET}
+      - NEXTCLOUD_URL=https://${DOMAIN_NAME}
+      - PORT=3003
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+    volumes:
+      - ./whiteboard-data:/app/data
+    expose:
+      - "3001"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.nextcloud-whiteboard.entrypoints=websecure
+      - traefik.http.routers.nextcloud-whiteboard.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/whiteboard`)
+      - traefik.http.routers.nextcloud-whiteboard.service=nextcloud-whiteboard
+      - traefik.http.routers.nextcloud-whiteboard.priority=10
+      - traefik.http.services.nextcloud-whiteboard.loadbalancer.server.port=3002
+      - traefik.http.routers.nextcloud-whiteboard.tls.certresolver=letsencrypt
+      # Autoheal and Watchtower labels
+      - autoheal=true
+      - com.centurylinklabs.watchtower.enable=true
+    networks:
+      - proxy
     
 networks:
   proxy:

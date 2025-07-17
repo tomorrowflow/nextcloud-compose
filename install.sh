@@ -133,6 +133,7 @@ setup_directories() {
     mkdir -p app
     mkdir -p data
     mkdir -p scripts/{watchtower-hooks}
+    mkdir -p whiteboard-data
     
     # Set proper permissions for acme.json
     touch traefik/acme.json
@@ -406,6 +407,9 @@ generate_env_file() {
     # Generate Watchtower API token
     WATCHTOWER_API_TOKEN=$(generate_password 32)
     
+    # Generate Whiteboard JWT secret
+    WHITEBOARD_JWT_SECRET=$(generate_password 32)
+    
     # Create .env file
     cat > "$ENV_FILE" << EOF
 DOMAIN_NAME=$DOMAIN_NAME
@@ -420,6 +424,7 @@ TURN_SECRET=$TURN_SECRET
 SIGNALING_SECRET=$SIGNALING_SECRET
 INTERNAL_SECRET=$INTERNAL_SECRET
 WATCHTOWER_API_TOKEN=$WATCHTOWER_API_TOKEN
+WHITEBOARD_JWT_SECRET=$WHITEBOARD_JWT_SECRET
 
 # Watchtower Email Notifications (Optional - uncomment and configure if needed)
 # WATCHTOWER_EMAIL_FROM=watchtower@$DOMAIN_NAME
@@ -611,6 +616,7 @@ docker exec -it -u 33 nextcloud-app ./occ db:add-missing-indices
 docker exec -it -u 33 nextcloud-app ./occ maintenance:repair --include-expensive
 docker exec -it -u 33 nextcloud-app ./occ app:enable spreed
 docker exec -it -u 33 nextcloud-app ./occ app:enable calendar
+docker exec -it -u 33 nextcloud-app ./occ app:enable whiteboard
 
 # Update Nextcloud integrity hashes to include our .user.ini changes
 print_info "Updating Nextcloud integrity checksums..."

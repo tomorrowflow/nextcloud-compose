@@ -197,6 +197,72 @@ The installation includes a high-performance backend for Nextcloud Talk:
    - **TURN server**: `signal.your-domain.com:3478`
    - **TURN secret**: (found in `.env` file)
 
+## 🎨 Nextcloud Whiteboard Integration
+
+The installation includes a collaborative whiteboard feature for Nextcloud:
+
+### ✅ Features
+- **Real-time collaboration**: Multiple users can draw simultaneously
+- **Rich drawing tools**: Pens, shapes, text, colors, and more
+- **Integration**: Seamlessly integrated with Nextcloud Files and Talk
+- **Persistent storage**: Whiteboards are saved as Nextcloud files
+- **Access control**: Uses Nextcloud's permission system
+
+### 🔧 Configuration
+
+The whiteboard service is automatically configured during installation:
+
+1. **Enable Whiteboard app** (done automatically by installer)
+2. **Access whiteboard** via Nextcloud Files or create new whiteboards directly
+3. **Share whiteboards** using Nextcloud's sharing features
+
+### 🌐 Access URLs
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Whiteboard API | https://your-domain.com/whiteboard | Backend service endpoint |
+| Whiteboard Files | https://your-domain.com/apps/files | Create and manage whiteboard files |
+
+### 🔐 Security Configuration
+
+The whiteboard uses JWT tokens for authentication. The secret is configured in your `.env` file:
+
+```env
+WHITEBOARD_JWT_SECRET=your-secure-jwt-secret-for-whiteboard
+```
+
+### 📊 Health Monitoring
+
+The whiteboard service includes health checks:
+- **Health endpoint**: `https://your-domain.com/whiteboard/health`
+- **Monitoring**: Integrated with autoheal service
+- **Logs**: Available via `docker-compose logs nextcloud-whiteboard`
+
+### 🛠️ Troubleshooting
+
+If whiteboard features are not working:
+
+1. **Check service status:**
+   ```bash
+   docker-compose ps nextcloud-whiteboard
+   ```
+
+2. **View whiteboard logs:**
+   ```bash
+   docker-compose logs -f nextcloud-whiteboard
+   ```
+
+3. **Verify JWT configuration:**
+   ```bash
+   # Check if JWT secret is set
+   grep WHITEBOARD_JWT_SECRET .env
+   ```
+
+4. **Restart whiteboard service:**
+   ```bash
+   docker-compose restart nextcloud-whiteboard
+   ```
+
 ## 🔧 Troubleshooting
 
 Run the built-in troubleshooting scripts:
