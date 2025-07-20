@@ -163,7 +163,6 @@ services:
       - 3478:3478/tcp
       - 3478:3478/udp
       - 8081:8081/tcp
-      - 3002:3002/tcp
     environment:
       - TZ=Europe/Berlin
       - TALK_PORT=3478
@@ -288,7 +287,7 @@ services:
     volumes:
       - ./whiteboard-data:/app/data
     expose:
-      - "3001"
+      - "3003"
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
@@ -296,7 +295,7 @@ services:
       - traefik.http.routers.nextcloud-whiteboard.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/whiteboard`)
       - traefik.http.routers.nextcloud-whiteboard.service=nextcloud-whiteboard
       - traefik.http.routers.nextcloud-whiteboard.priority=10
-      - traefik.http.services.nextcloud-whiteboard.loadbalancer.server.port=3002
+      - traefik.http.services.nextcloud-whiteboard.loadbalancer.server.port=3003
       - traefik.http.routers.nextcloud-whiteboard.tls.certresolver=letsencrypt
       # Autoheal and Watchtower labels
       - autoheal=true
