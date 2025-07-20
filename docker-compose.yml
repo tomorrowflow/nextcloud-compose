@@ -86,7 +86,6 @@ services:
       - ./data:/var/www/html/data
       # Pre-installation hooks for PHP configuration and extensions
       - ./hooks/pre-installation:/docker-entrypoint-hooks.d/pre-installation:ro
-
     expose:
       - "80"
     labels:
@@ -273,7 +272,7 @@ services:
       nextcloud-app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -297,6 +296,9 @@ services:
       - traefik.http.routers.nextcloud-whiteboard.priority=10
       - traefik.http.services.nextcloud-whiteboard.loadbalancer.server.port=3003
       - traefik.http.routers.nextcloud-whiteboard.tls.certresolver=letsencrypt
+      # Path stripping middleware to fix 404 error
+      - traefik.http.middlewares.strip-whiteboard.stripprefix.prefixes=/whiteboard
+      - traefik.http.routers.nextcloud-whiteboard.middlewares=strip-whiteboard
       # Autoheal and Watchtower labels
       - autoheal=true
       - com.centurylinklabs.watchtower.enable=true
