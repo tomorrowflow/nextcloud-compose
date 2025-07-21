@@ -265,28 +265,28 @@ services:
       - com.centurylinklabs.watchtower.enable=false
 
   nextcloud-whiteboard:
-    image: ghcr.io/nextcloud-releases/whiteboard:release
+    image: ghcr.io/nextcloud-releases/whiteboard:latest
     container_name: nextcloud-whiteboard
     restart: unless-stopped
     depends_on:
       nextcloud-app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
     environment:
-      - JWT_SECRET=${WHITEBOARD_JWT_SECRET}
+      - JWT_SECRET_KEY=${WHITEBOARD_JWT_SECRET}
       - NEXTCLOUD_URL=https://${DOMAIN_NAME}
-      - PORT=3003
+      - PORT=3002
       - NODE_ENV=production
       - LOG_LEVEL=info
     volumes:
       - ./whiteboard-data:/app/data
     expose:
-      - "3003"
+      - "3002"
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
@@ -294,7 +294,7 @@ services:
       - traefik.http.routers.nextcloud-whiteboard.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/whiteboard`)
       - traefik.http.routers.nextcloud-whiteboard.service=nextcloud-whiteboard
       - traefik.http.routers.nextcloud-whiteboard.priority=10
-      - traefik.http.services.nextcloud-whiteboard.loadbalancer.server.port=3003
+      - traefik.http.services.nextcloud-whiteboard.loadbalancer.server.port=3002
       - traefik.http.routers.nextcloud-whiteboard.tls.certresolver=letsencrypt
       # Path stripping middleware to fix 404 error
       - traefik.http.middlewares.strip-whiteboard.stripprefix.prefixes=/whiteboard
